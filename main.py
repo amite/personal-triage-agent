@@ -6,6 +6,8 @@ Built with LangGraph using LLMs (Ollama/GPT) and the ReAct agent pattern
 import json
 import re
 import os
+import sqlite3
+import uuid
 from typing import TypedDict, List, Dict, Annotated, Literal, Optional, cast
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +15,7 @@ import requests
 from dotenv import load_dotenv
 
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -158,11 +161,35 @@ def route_after_tool(state: AgentState) -> str:
     return "finish"
 
 # ============================================================================
+# CHECKPOINTER INITIALIZATION
+# ============================================================================
+
+def get_checkpointer() -> SqliteSaver:
+    """
+    Initialize and return a SqliteSaver checkpointer.
+
+    The database file is stored in the data/ directory to keep the root clean.
+    This provides automatic state persistence for all graph executions.
+
+    Returns:
+        SqliteSaver: Configured checkpointer instance
+    """
+    # Ensure data directory exists
+    os.makedirs("data", exist_ok=True)
+
+    # Connect to SQLite database
+    db_path = "data/checkpoints.db"
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+
+    # Create and return checkpointer
+    return SqliteSaver(conn)
+
+# ============================================================================
 # GRAPH CONSTRUCTION
 # ============================================================================
 
 def build_graph():
-    """Construct the LangGraph workflow"""
+    """Construct the LangGraph workflow with automatic state persistence"""
 
     workflow = StateGraph(AgentState)
 
@@ -196,7 +223,11 @@ def build_graph():
     # Finish ends the graph
     workflow.add_edge("finish", END)
 
-    return workflow.compile()
+    # Initialize checkpointer for state persistence
+    checkpointer = get_checkpointer()
+
+    # Compile with checkpointer enabled
+    return workflow.compile(checkpointer=checkpointer)
 
 # ============================================================================
 # DISPLAY FUNCTIONS
@@ -335,8 +366,25 @@ def check_ollama_connection():
         console.print(f"[bold red]Error checking Ollama: {e}[/bold red]")
         return False
 
-def run_task_manager(user_request: str):
-    """Execute the task manager with given request"""
+def run_task_manager(user_request: str, thread_id: Optional[str] = None) -> AgentState:
+    """
+    Execute the task manager with given request
+
+    Args:
+        user_request: The user's task request
+        thread_id: Optional thread ID for persistence. If None, generates a new one.
+                  Use existing ID to continue a previous conversation.
+
+    Returns:
+        Final agent state after execution
+    """
+
+    # Generate or use provided thread ID
+    if thread_id is None:
+        thread_id = str(uuid.uuid4())
+        console.print(f"[dim]Starting new session: {thread_id[:8]}...[/dim]")
+    else:
+        console.print(f"[dim]Continuing session: {thread_id[:8]}...[/dim]")
 
     # Initialize state
     initial_state: AgentState = {
@@ -354,6 +402,9 @@ def run_task_manager(user_request: str):
 
     graph = build_graph()
 
+    # Configuration with thread ID for persistence
+    config = {"configurable": {"thread_id": thread_id}}
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -361,7 +412,8 @@ def run_task_manager(user_request: str):
     ) as progress:
         task = progress.add_task("[cyan]🤖 Executing LLM-powered workflow...", total=None)
 
-        final_state = cast(AgentState, graph.invoke(initial_state))
+        # Invoke with config containing thread_id
+        final_state = cast(AgentState, graph.invoke(initial_state, config=config))
 
         progress.update(task, completed=True)
 
@@ -370,6 +422,9 @@ def run_task_manager(user_request: str):
     display_execution_tree(final_state)
     console.print()
     display_summary(final_state)
+
+    # Display thread ID for future reference
+    console.print(f"\n[dim]Session ID: {thread_id}[/dim]")
 
     return final_state
 
@@ -394,7 +449,17 @@ def main():
     example_requests = [
         "I need to prepare for the meeting tomorrow, remind me to check the attached files, and draft an email to the client about the new deadline. Also, search for the current stock price of Google.",
         "Remind me to call John at 3pm, draft an email about the quarterly report, and look up the weather forecast.",
-        "Set a reminder to submit the proposal, search for recent AI developments, and write an email about project updates."
+        "Set a reminder to submit the proposal, search for recent AI developments, and write an email about project updates.",
+        "I have a presentation next Friday. Remind me to review the slides two days before, draft a follow-up email to attendees, and search for the latest market trends in our industry.",
+        "Help me organize my week: set a reminder to complete the budget review, draft an email requesting budget approval from finance, and look up competitor pricing updates.",
+        "I'm switching projects next month. Remind me to archive old files, draft a transition email to the team, and search for best practices in project handoffs.",
+        "Conference preparation: remind me to book hotel accommodation, draft an email to the conference organizers with my attendance confirmation, and search for the event schedule and keynote speakers.",
+        "End of quarter tasks: set a reminder for quarterly performance reviews, draft an email summarizing team achievements, and search for Q4 industry benchmarks.",
+        "Client onboarding: remind me to send the welcome package, draft an introductory email outlining our service roadmap, and search for similar case studies to share.",
+        "Research sprint: remind me to consolidate findings, draft an email with research methodology summary, and search for recent publications on natural language processing.",
+        "Team communication: set a reminder to conduct one-on-ones with three team members, draft an announcement about new remote work policy, and search for employee engagement best practices.",
+        "Personal development: remind me to register for the online course, draft an email to my manager about skill development goals, and search for Python machine learning certifications.",
+        "Vendor management: remind me to review contracts with current vendors, draft an email requesting quote updates, and search for new tools in project management software."
     ]
 
     console.print("\n[bold cyan]📋 Example Requests:[/bold cyan]")

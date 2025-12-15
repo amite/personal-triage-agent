@@ -14,7 +14,7 @@ console = Console()
 # OpenAI configuration
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_GPT_MODEL = "gpt-5-mini"
+DEFAULT_GPT_MODEL = "gpt-5-nano"
 
 class GPTClient(LLMClientBase):
     """Client for interacting with OpenAI GPT-5 API"""
