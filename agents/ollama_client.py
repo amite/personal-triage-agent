@@ -4,6 +4,8 @@ Ollama Client - Handles communication with Ollama API
 
 import requests
 from rich.console import Console
+from typing import Optional
+from agents.llm_client_base import LLMClientBase
 
 # Initialize Rich console
 console = Console()
@@ -12,11 +14,10 @@ console = Console()
 OLLAMA_BASE_URL = "http://localhost:11434"
 MODEL_NAME = "llama3.1:8b-instruct-q4_K_M"  # You can change this to your preferred model
 
-class OllamaClient:
+class OllamaClient(LLMClientBase):
     """Client for interacting with Ollama API"""
 
-    @staticmethod
-    def generate(prompt: str, model: str = MODEL_NAME, temperature: float = 0.7) -> str:
+    def generate(self, prompt: str, model: Optional[str] = None, temperature: float = 0.3) -> str:
         """Generate text using Ollama"""
         try:
             response = requests.post(

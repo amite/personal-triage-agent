@@ -7,7 +7,8 @@ import json
 import re
 import logging
 from functools import lru_cache
-from agents.ollama_client import OllamaClient
+from agents.llm_client_base import LLMClientBase
+from agents.llm_factory import LLMFactory
 from tools.reminder_tool import ReminderTool
 from tools.drafting_tool import DraftingTool
 from tools.external_search_tool import ExternalSearchTool
@@ -39,8 +40,14 @@ class LLMTriageAgent:
     Uses Ollama to autonomously identify tasks and select tools
     """
 
-    def __init__(self):
-        self.llm = OllamaClient()
+    def __init__(self, llm_client: Optional[LLMClientBase] = None):
+        """
+        Initialize the triage agent
+        
+        Args:
+            llm_client: Optional LLM client. If not provided, uses factory to create default client
+        """
+        self.llm = llm_client or LLMFactory.get_llm_client_from_env()
         self._tool_cache = self._build_tool_cache()
 
     def _build_tool_cache(self) -> str:

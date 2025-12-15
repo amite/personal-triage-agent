@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from agents.ollama_client import OllamaClient
+from agents.llm_client_base import LLMClientBase
 
 class DraftingTool:
     """Generates and saves draft emails"""
@@ -15,7 +15,7 @@ class DraftingTool:
     description = "Drafts an email based on the given topic or content. Use this when the user needs to write, compose, or draft an email or message."
 
     @staticmethod
-    def execute(content: str, llm_client: Optional[OllamaClient] = None) -> str:
+    def execute(content: str, llm_client: Optional[LLMClientBase] = None) -> str:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         file_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
