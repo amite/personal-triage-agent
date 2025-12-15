@@ -1,14 +1,16 @@
 """
 Personal Task Manager Triage - A Multi-Agent Task Management System
-Built with LangGraph using LLMs (Ollama) and the ReAct agent pattern
+Built with LangGraph using LLMs (Ollama/GPT) and the ReAct agent pattern
 """
 
 import json
 import re
+import os
 from typing import TypedDict, List, Dict, Annotated, Literal, Optional, cast
 from dataclasses import dataclass
 from datetime import datetime
 import requests
+from dotenv import load_dotenv
 
 from langgraph.graph import StateGraph, END
 from rich.console import Console
@@ -18,6 +20,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.markdown import Markdown
 from rich.tree import Tree
 from rich import print as rprint
+
+# Load environment variables
+load_dotenv()
 
 # Initialize Rich console
 console = Console()
@@ -202,7 +207,7 @@ def display_welcome():
     welcome_text = """
     # 🤖 Personal Task Manager Triage (LLM-Powered)
 
-    **Multi-Agent System using Ollama, LangGraph & ReAct Pattern**
+    **Multi-Agent System using LLMs (Ollama/GPT), LangGraph & ReAct Pattern**
 
     This system uses Large Language Models to autonomously analyze requests,
     identify patterns, and select the right tools for task execution.
@@ -281,6 +286,26 @@ def display_summary(state: AgentState):
 # MAIN APPLICATION
 # ============================================================================
 
+def check_llm_connection():
+    """Check if the configured LLM provider is available"""
+    provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
+    
+    if provider == "ollama":
+        return check_ollama_connection()
+    elif provider == "gpt":
+        # For GPT, just check if API key is available
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key and api_key.strip():
+            console.print(f"[green]✓ GPT client configured with API key[/green]")
+            return True
+        else:
+            console.print("[bold red]✗ OpenAI API key not configured[/bold red]")
+            console.print("[yellow]Set OPENAI_API_KEY in your .env file[/yellow]")
+            return False
+    else:
+        console.print(f"[bold red]✗ Unknown LLM provider: {provider}[/bold red]")
+        return False
+
 def check_ollama_connection():
     """Check if Ollama is running and accessible"""
     try:
@@ -352,9 +377,15 @@ def main():
     """Main CLI entry point"""
     display_welcome()
 
-    # Check Ollama connection
-    if not check_ollama_connection():
-        console.print("\n[bold red]Please start Ollama before running this application.[/bold red]")
+    # Check LLM connection based on configured provider
+    if not check_llm_connection():
+        provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
+        if provider == "ollama":
+            console.print("\n[bold red]Please start Ollama before running this application.[/bold red]")
+        elif provider == "gpt":
+            console.print("\n[bold red]Please configure OpenAI API key before running this application.[/bold red]")
+        else:
+            console.print(f"\n[bold red]Please configure {provider} before running this application.[/bold red]")
         return
 
     console.print()
@@ -370,12 +401,18 @@ def main():
     for i, req in enumerate(example_requests, 1):
         console.print(f"  {i}. {req[:80]}...")
 
-    console.print("\n[bold green]💬 Enter your request (or press Enter for example 1):[/bold green]")
+    console.print("\n[bold green]💬 Enter your request (or press Enter for example 1, or enter 1-3 to select an example):[/bold green]")
     user_input = input("> ").strip()
 
     if not user_input:
         user_input = example_requests[0]
         console.print(f"[dim]Using example: {user_input}[/dim]\n")
+    elif user_input.isdigit():
+        example_index = int(user_input) - 1
+        if 0 <= example_index < len(example_requests):
+            selected_example = example_requests[example_index]
+            console.print(f"[dim]Using example {user_input}: {selected_example}[/dim]\n")
+            user_input = selected_example
 
     # Run the task manager
     try:

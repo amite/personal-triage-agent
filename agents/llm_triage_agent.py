@@ -37,7 +37,7 @@ AVAILABLE_TOOLS = {
 class LLMTriageAgent:
     """
     LLM-powered Triage Agent using ReAct pattern
-    Uses Ollama to autonomously identify tasks and select tools
+    Uses environment-configured LLM client (Ollama or GPT) to autonomously identify tasks and select tools
     """
 
     def __init__(self, llm_client: Optional[LLMClientBase] = None):
@@ -97,7 +97,7 @@ For each task you identify, specify:
 1. Which tool should handle it (reminder_tool, drafting_tool, or search_tool)
 2. The specific content/action for that task
 
-Respond in this EXACT JSON format (valid JSON only, no extra text):
+IMPORTANT: Respond ONLY with valid JSON in this EXACT format. Do NOT include any additional text, explanations, or markdown formatting. Only return the JSON object:
 {{
   "tasks": [
     {{"tool": "tool_name", "content": "task description"}},
@@ -111,11 +111,52 @@ JSON Response:"""
         try:
             logger.info(f"Processing request: {request[:50]}...")
             response = self.llm.generate(prompt, temperature=0.3)
+            logger.info(f"Full LLM response: {response}")
 
             # Extract JSON from response with better error handling
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
+            # Try multiple approaches to find valid JSON
+            json_str = None
+            
+            # Approach 1: Look for JSON that starts with { and ends with } - handle nested objects
+            # Use a more sophisticated approach to find balanced braces
+            json_str = None
+            try:
+                # Try to find the outermost JSON object
+                brace_count = 0
+                start_idx = response.find('{')
+                if start_idx != -1:
+                    for i, char in enumerate(response[start_idx:]):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_str = response[start_idx:start_idx+i+1]
+                                break
+            except Exception:
+                pass
+            
+            # Approach 2: If that fails, try to find the first valid JSON object
+            if not json_str:
+                try:
+                    # Try to find JSON by looking for the pattern we expect
+                    json_pattern = r'\{["\']tasks["\']\s*:\s*\[.*?\]\s*,\s*["\']reasoning["\']\s*:\s*["\'].+?["\']\s*\}'
+                    json_match = re.search(json_pattern, response, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group()
+                except Exception:
+                    pass
+            
+            # Approach 3: Try to parse the entire response as JSON
+            if not json_str:
+                try:
+                    entire_response = json.loads(response)
+                    if isinstance(entire_response, dict) and "tasks" in entire_response:
+                        json_str = response
+                except json.JSONDecodeError:
+                    pass
+            
+            if json_str:
                 try:
                     parsed = json.loads(json_str)
                     
@@ -147,14 +188,91 @@ JSON Response:"""
                     
                 except json.JSONDecodeError as json_err:
                     logger.error(f"JSON decode error: {json_err}")
-                    return self._fallback_parse(request)
+                    logger.debug(f"Failed to parse JSON: {json_str}")
+                    
+                    # Attempt to repair the JSON
+                    repaired_json = self._attempt_json_repair(json_str)
+                    if repaired_json:
+                        try:
+                            parsed = json.loads(repaired_json)
+                            logger.info("Successfully repaired JSON")
+                            
+                            # Validate parsed structure
+                            if not isinstance(parsed, dict):
+                                raise ValueError("LLM response is not a dictionary")
+                            
+                            tasks = parsed.get("tasks", [])
+                            reasoning = parsed.get("reasoning", "No reasoning provided")
+                            
+                            # Validate tasks structure
+                            if not isinstance(tasks, list):
+                                tasks = []
+                                logger.warning("Invalid tasks format in LLM response")
+                            
+                            # Ensure all tasks have required fields
+                            validated_tasks = []
+                            for task in tasks:
+                                if isinstance(task, dict) and "tool" in task and "content" in task:
+                                    validated_tasks.append({
+                                        "tool": str(task["tool"]),
+                                        "content": str(task["content"])
+                                    })
+                                else:
+                                    logger.warning(f"Invalid task format: {task}")
+                            
+                            logger.info(f"Successfully parsed {len(validated_tasks)} tasks from repaired JSON")
+                            return validated_tasks, str(reasoning)
+                            
+                        except Exception as repair_err:
+                            logger.error(f"JSON repair failed: {repair_err}")
+                            return self._fallback_parse(request)
+                    else:
+                        return self._fallback_parse(request)
             else:
                 logger.warning("No JSON found in LLM response, using fallback")
+                logger.debug(f"LLM response: {response}")
                 return self._fallback_parse(request)
 
         except Exception as e:
             logger.error(f"LLM parsing failed, using fallback: {e}", exc_info=True)
             return self._fallback_parse(request)
+
+    def _attempt_json_repair(self, json_str: str) -> Optional[str]:
+        """Attempt to repair common JSON issues in LLM responses"""
+        try:
+            logger.debug(f"Attempting to repair JSON: {json_str}")
+            
+            # Fix common issues
+            repaired = json_str.strip()
+            
+            # Remove trailing commas
+            repaired = re.sub(r',\s*([}\]])\s*', r'\1', repaired)
+            
+            # Fix missing commas between array elements (the specific error we're seeing)
+            repaired = re.sub(r'\}\s*\{', r'}, {', repaired)
+            
+            # Fix missing commas between array elements - more comprehensive
+            repaired = re.sub(r'"\s*"', r'", "', repaired)
+            
+            # Fix missing commas in task arrays specifically
+            repaired = re.sub(r'(\}\s*)(\})', r'\1,\2', repaired)
+            
+            # Fix missing quotes around keys
+            repaired = re.sub(r'([{,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', repaired)
+            
+            # Fix single quotes to double quotes
+            repaired = repaired.replace("'", '"')
+            
+            # Fix missing commas in arrays
+            repaired = re.sub(r'"\s*"', r'", "', repaired)
+            
+            # Try to parse the repaired JSON
+            json.loads(repaired)
+            logger.debug(f"Successfully repaired JSON: {repaired}")
+            return repaired
+        except Exception as e:
+            logger.debug(f"JSON repair failed: {e}")
+            return None
 
     def _fallback_parse(self, request: str) -> ParseResult:
         """Fallback parsing if LLM fails

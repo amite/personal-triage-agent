@@ -14,10 +14,10 @@ console = Console()
 # OpenAI configuration
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_GPT_MODEL = "gpt-4-0"
+DEFAULT_GPT_MODEL = "gpt-5-mini"
 
 class GPTClient(LLMClientBase):
-    """Client for interacting with OpenAI GPT-4 API"""
+    """Client for interacting with OpenAI GPT-5 API"""
     
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -48,30 +48,61 @@ class GPTClient(LLMClientBase):
         model = model or DEFAULT_GPT_MODEL
         
         try:
-            response = requests.post(
-                f"{OPENAI_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": temperature,
-                    "max_tokens": 1000
-                },
-                timeout=60
-            )
+            # Use Responses API for GPT-5 models, Chat Completions for older models
+            if model.startswith("gpt-5"):
+                # GPT-5 models use Responses API
+                response = requests.post(
+                    f"{OPENAI_BASE_URL}/responses",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": model,
+                        "input": prompt,
+                        "max_output_tokens": 2000
+                    },
+                    timeout=60
+                )
+            else:
+                # Older models use Chat Completions API
+                response = requests.post(
+                    f"{OPENAI_BASE_URL}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ],
+                        "max_completion_tokens": 1000
+                    },
+                    timeout=60
+                )
             response.raise_for_status()
             
-            # Extract the generated content
-            choices = response.json().get("choices", [])
-            if choices and len(choices) > 0:
-                return choices[0]["message"]["content"].strip()
+            # Extract the generated content based on API used
+            response_data = response.json()
+            
+            if model.startswith("gpt-5"):
+                # Responses API format
+                output_items = response_data.get("output", [])
+                for item in output_items:
+                    if item.get("type") == "message":
+                        content_items = item.get("content", [])
+                        for content in content_items:
+                            if content.get("type") == "output_text":
+                                return content.get("text", "").strip()
+                raise ValueError("No output_text found in Responses API response")
             else:
-                raise ValueError("No choices returned from GPT-4 API")
+                # Chat Completions API format
+                choices = response_data.get("choices", [])
+                if choices and len(choices) > 0:
+                    return choices[0]["message"]["content"].strip()
+                else:
+                    raise ValueError("No choices returned from Chat Completions API")
                 
         except requests.exceptions.ConnectionError:
             console.print("[bold red]Error: Cannot connect to OpenAI API. Check your internet connection.[/bold red]")
