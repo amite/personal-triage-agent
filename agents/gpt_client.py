@@ -70,18 +70,20 @@ class GPTClient(LLMClientBase):
             # SDK provides direct access to output text - no manual JSON parsing needed
             return response.output_text.strip()
                 
-        except APIConnectionError as e:
-            error_msg = "Cannot connect to OpenAI API. Check your internet connection."
-            console.print(f"[bold red]Error: {error_msg}[/bold red]")
-            logger.error(f"Connection error: {e}")
-            raise Exception(error_msg) from e
         except APITimeoutError as e:
             error_msg = "OpenAI API request timed out."
             console.print(f"[bold red]Error: {error_msg}[/bold red]")
             logger.error(f"Timeout error: {e}")
             raise Exception(error_msg) from e
+        except APIConnectionError as e:
+            error_msg = "Cannot connect to OpenAI API. Check your internet connection."
+            console.print(f"[bold red]Error: {error_msg}[/bold red]")
+            logger.error(f"Connection error: {e}")
+            raise Exception(error_msg) from e
         except APIError as e:
-            error_msg = f"OpenAI API error: {e.status_code if hasattr(e, 'status_code') else 'unknown'} - {e.message if hasattr(e, 'message') else str(e)}"
+            status_code = getattr(e, "status_code", "unknown")
+            message = getattr(e, "message", str(e))
+            error_msg = f"OpenAI API error: {status_code} - {message}"
             console.print(f"[bold red]{error_msg}[/bold red]")
             logger.error(f"API error: {e}")
             raise Exception(error_msg) from e
