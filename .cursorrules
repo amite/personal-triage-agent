@@ -1,0 +1,25 @@
+# Cursor Rules for Personal Triage Agent
+
+## Python Execution
+- Always use `uv run` to execute Python commands, scripts, or modules
+- Never use `python`, `python3`, or `py` directly
+- Examples:
+  - `uv run python script.py` instead of `python script.py`
+  - `uv run python -m module` instead of `python -m module`
+  - `uv run pytest` instead of `pytest`
+  - `uv run python -c "code"` instead of `python -c "code"`
+
+## Nu Shell Script Creation Pattern
+- When creating nu shell scripts, follow this two-file pattern:
+  1. **Create a Python script** in the `scripts/` folder with the actual logic
+     - Use proper Python structure with command-line argument parsing
+     - Include error handling and clear output messages
+  2. **Create a simple nu script** in `utils/nu-scripts/` that acts as a wrapper
+     - The nu script should accept parameters and pass them to the Python script
+     - Use `uv run python -m scripts.<script_name>` to call the Python script
+     - Keep the nu script minimal - it should only handle parameter passing
+- Example pattern:
+  - Python script: `scripts/check_draft.py` (contains the logic)
+  - Nu script: `utils/nu-scripts/check-draft.nu` (simple wrapper calling the Python script)
+- This pattern makes scripts easier to maintain, test, and debug
+
