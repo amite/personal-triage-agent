@@ -1,7 +1,7 @@
-"""Tools module - Contains all tool classes for the Personal Task Manager Triage system"""
+"""Tools module - Contains all tool classes for the Personal Task Manager Triage system
 
-from .reminder_tool import ReminderTool
-from .drafting_tool import DraftingTool
-from .external_search_tool import ExternalSearchTool
+Note: Tools are imported lazily to avoid circular import issues with agents module.
+Import directly from submodules: from tools.reminder_tool import ReminderTool
+"""
 
-__all__ = ['ReminderTool', 'DraftingTool', 'ExternalSearchTool']
+__all__ = ['ReminderTool', 'DraftingTool', 'ExternalSearchTool', 'SearchDraftsTool']

@@ -6,9 +6,13 @@ Usage: python -m utils.inspect_checkpoints
 import sqlite3
 import json
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from rich.console import Console
 from rich.table import Table
+import msgpack
+import logging
+
+logger = logging.getLogger(__name__)
 
 console = Console()
 
@@ -112,6 +116,82 @@ def get_all_thread_ids(db_path: str = "data/checkpoints.db") -> List[str]:
     conn.close()
 
     return threads
+
+
+def get_checkpoint_state(
+    thread_id: str, checkpoint_id: Optional[str] = None, db_path: str = "data/checkpoints.db"
+) -> Dict[str, Any]:
+    """Get deserialized AgentState from checkpoint.
+
+    Args:
+        thread_id: Thread ID to query
+        checkpoint_id: Specific checkpoint ID (if None, gets latest)
+        db_path: Path to checkpoint database
+
+    Returns:
+        Deserialized AgentState dict
+    """
+    db_file = Path(db_path)
+    if not db_file.exists():
+        logger.warning(f"Database not found at {db_path}")
+        return {}
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    try:
+        if checkpoint_id:
+            # Get specific checkpoint
+            cursor.execute(
+                """
+                SELECT checkpoint, parent_checkpoint_id
+                FROM checkpoints
+                WHERE thread_id = ? AND checkpoint_id = ?
+                """,
+                (thread_id, checkpoint_id),
+            )
+        else:
+            # Get latest checkpoint
+            cursor.execute(
+                """
+                SELECT checkpoint, parent_checkpoint_id
+                FROM checkpoints
+                WHERE thread_id = ?
+                ORDER BY rowid DESC
+                LIMIT 1
+                """,
+                (thread_id,),
+            )
+
+        result = cursor.fetchone()
+        if not result:
+            logger.warning(f"No checkpoint found for thread {thread_id}")
+            return {}
+
+        checkpoint_blob, _ = result
+
+        # Deserialize msgpack checkpoint
+        state = msgpack.unpackb(checkpoint_blob, raw=False)
+        logger.debug(f"Deserialized checkpoint for thread {thread_id}")
+        return state
+    except Exception as e:
+        logger.error(f"Failed to deserialize checkpoint: {e}")
+        return {}
+    finally:
+        conn.close()
+
+
+def get_latest_checkpoint(thread_id: str, db_path: str = "data/checkpoints.db") -> Dict[str, Any]:
+    """Get latest checkpoint state for a thread.
+
+    Args:
+        thread_id: Thread ID to query
+        db_path: Path to checkpoint database
+
+    Returns:
+        Deserialized AgentState dict
+    """
+    return get_checkpoint_state(thread_id, checkpoint_id=None, db_path=db_path)
 
 
 if __name__ == "__main__":

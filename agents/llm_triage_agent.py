@@ -12,6 +12,7 @@ from agents.llm_factory import LLMFactory
 from tools.reminder_tool import ReminderTool
 from tools.drafting_tool import DraftingTool
 from tools.external_search_tool import ExternalSearchTool
+from tools.search_drafts_tool import SearchDraftsTool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +37,8 @@ class TaskResponse(BaseModel):
 AVAILABLE_TOOLS = {
     "reminder_tool": ReminderTool,
     "drafting_tool": DraftingTool,
-    "search_tool": ExternalSearchTool
+    "search_tool": ExternalSearchTool,
+    "search_drafts_tool": SearchDraftsTool
 }
 
 class LLMTriageAgent:

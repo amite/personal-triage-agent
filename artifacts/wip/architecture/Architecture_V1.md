@@ -45,6 +45,8 @@
 
 [crash course from gemini](https://gemini.google.com/app/e3d101faee6ca3d3)
 
+[official langgraph docs](https://docs.langchain.com/oss/python/langgraph/overview)
+
 In `main.py`, the three nodes are:
 
 ### 1. **Agent Node** (Triage Node)

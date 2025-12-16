@@ -38,6 +38,9 @@ from agents.ollama_client import OllamaClient, OLLAMA_BASE_URL, MODEL_NAME
 from tools.reminder_tool import ReminderTool
 from tools.drafting_tool import DraftingTool
 from tools.external_search_tool import ExternalSearchTool
+from tools.search_drafts_tool import SearchDraftsTool
+from tools.draft_indexer import DraftIndexer
+from utils.example_loader import ExampleLoader
 
 # ============================================================================
 # STATE DEFINITION
@@ -51,6 +54,7 @@ class AgentState(TypedDict):
     iteration: int
     agent_thoughts: List[str]
     llm_reasoning: List[str]
+    thread_id: str
 
 # ============================================================================
 # GRAPH NODES
@@ -113,7 +117,8 @@ def tool_execution_node(state: AgentState) -> AgentState:
         tool_display_names = {
             "reminder_tool": "⏰ Scheduler Agent",
             "drafting_tool": "✉️  Drafting Agent",
-            "search_tool": "🔍 Data Agent"
+            "search_tool": "🔍 Data Agent",
+            "search_drafts_tool": "📚 Draft Search Agent"
         }
 
         display_name = tool_display_names.get(tool_name, tool_name)
@@ -134,6 +139,22 @@ def tool_execution_node(state: AgentState) -> AgentState:
     state["task_queue"].pop(0)
     state["agent_thoughts"].append(f"Executed {tool_name}: {content[:50]}")
     state["iteration"] += 1
+
+    # Index draft if drafting_tool was executed
+    if tool_name == "drafting_tool" and "✓" in result:
+        try:
+            # Extract file path from result string
+            import re as regex
+            file_match = regex.search(r"(inbox/drafts/draft_[^\s]+\.txt)", result)
+            if file_match:
+                file_path = file_match.group(1)
+                # Index draft with checkpoint metadata
+                indexer = DraftIndexer()
+                indexer.index_draft_file(file_path, thread_id=state.get("thread_id", "unknown"))
+        except Exception as e:
+            # Log but don't fail the workflow if indexing fails
+            import logging
+            logging.getLogger(__name__).warning(f"Draft indexing failed: {e}")
 
     return state
 
@@ -294,7 +315,8 @@ def display_summary(state: AgentState):
         tool_display = {
             "drafting_tool": "✉️  Drafting Tool",
             "reminder_tool": "⏰ Reminder Tool",
-            "search_tool": "🔍 Search Tool"
+            "search_tool": "🔍 Search Tool",
+            "search_drafts_tool": "📚 Draft Search Tool"
         }.get(tool_name, tool_name)
 
         table.add_row(str(step), tool_display, result)
@@ -395,7 +417,8 @@ def run_task_manager(user_request: str, thread_id: Optional[str] = None) -> Agen
         "current_task": {},
         "iteration": 0,
         "agent_thoughts": [],
-        "llm_reasoning": []
+        "llm_reasoning": [],
+        "thread_id": thread_id
     }
 
     # Build and execute graph
@@ -446,28 +469,21 @@ def main():
 
     console.print()
 
-    # Example requests
-    example_requests = [
-        "I need to prepare for the meeting tomorrow, remind me to check the attached files, and draft an email to the client about the new deadline. Also, search for the current stock price of Google.",
-        "Remind me to call John at 3pm, draft an email about the quarterly report, and look up the weather forecast.",
-        "Set a reminder to submit the proposal, search for recent AI developments, and write an email about project updates.",
-        "I have a presentation next Friday. Remind me to review the slides two days before, draft a follow-up email to attendees, and search for the latest market trends in our industry.",
-        "Help me organize my week: set a reminder to complete the budget review, draft an email requesting budget approval from finance, and look up competitor pricing updates.",
-        "I'm switching projects next month. Remind me to archive old files, draft a transition email to the team, and search for best practices in project handoffs.",
-        "Conference preparation: remind me to book hotel accommodation, draft an email to the conference organizers with my attendance confirmation, and search for the event schedule and keynote speakers.",
-        "End of quarter tasks: set a reminder for quarterly performance reviews, draft an email summarizing team achievements, and search for Q4 industry benchmarks.",
-        "Client onboarding: remind me to send the welcome package, draft an introductory email outlining our service roadmap, and search for similar case studies to share.",
-        "Research sprint: remind me to consolidate findings, draft an email with research methodology summary, and search for recent publications on natural language processing.",
-        "Team communication: set a reminder to conduct one-on-ones with three team members, draft an announcement about new remote work policy, and search for employee engagement best practices.",
-        "Personal development: remind me to register for the online course, draft an email to my manager about skill development goals, and search for Python machine learning certifications.",
-        "Vendor management: remind me to review contracts with current vendors, draft an email requesting quote updates, and search for new tools in project management software."
-    ]
+    # Load examples from YAML configuration
+    loader = ExampleLoader()
+    example_requests = loader.get_all_requests()
 
+    if not example_requests:
+        console.print("[yellow]⚠ No examples loaded. Please check data/examples.yaml[/yellow]\n")
+        return
+
+    # Display examples with metadata
     console.print("\n[bold cyan]📋 Example Requests:[/bold cyan]")
-    for i, req in enumerate(example_requests, 1):
-        console.print(f"  {i}. {req[:80]}...")
+    for i, example in enumerate(loader.examples, 1):
+        complexity_marker = "🟢" if example.complexity == "simple" else "🟡" if example.complexity == "medium" else "🔴"
+        console.print(f"  {i}. {complexity_marker} {example.request[:70]}... [{example.category}]")
 
-    console.print("\n[bold green]💬 Enter your request (or press Enter for example 1, or enter 1-3 to select an example):[/bold green]")
+    console.print("\n[bold green]💬 Enter your request (or press Enter for example 1, or enter number to select):[/bold green]")
     user_input = input("> ").strip()
 
     if not user_input:
