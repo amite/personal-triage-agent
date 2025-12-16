@@ -3,7 +3,6 @@ LLM Triage Agent - Main triage agent using ReAct pattern
 """
 
 from typing import List, Dict, Tuple, Optional
-import re
 import logging
 from functools import lru_cache
 from pydantic import BaseModel, Field
@@ -80,13 +79,11 @@ class LLMTriageAgent:
 
         # Input validation
         if not request or not isinstance(request, str):
-            logger.warning(f"Invalid request input: {request}")
-            return self._fallback_parse(request)
-
+            raise ValueError(f"Invalid request input: {request}")
+        
         request = request.strip()
         if not request:
-            logger.warning("Empty request after stripping")
-            return self._fallback_parse(request)
+            raise ValueError("Empty request after stripping")
 
         tool_descriptions = self._tool_cache
         prompt = f"""You are a task analysis expert. Analyze the following user request and break it down into discrete, actionable tasks.
@@ -119,134 +116,14 @@ Respond with JSON in this exact format:
                 logger.info(f"Successfully parsed {len(tasks)} tasks")
                 return tasks, parsed.reasoning
             except Exception as e:
-                logger.warning(f"Pydantic parsing failed: {e}, attempting fallback extraction")
-                return self._fallback_extract_json(response, request)
+                logger.error(f"Pydantic parsing failed: {e}")
+                raise ValueError(
+                    f"LLM response could not be parsed as valid JSON. "
+                    f"Expected format: {{'tasks': [{{'tool': '...', 'content': '...'}}], 'reasoning': '...'}}. "
+                    f"Response received: {response[:500]}..."
+                )
 
         except Exception as e:
             logger.error(f"LLM generation failed: {e}", exc_info=True)
-            return self._fallback_parse(request)
+            raise ValueError(f"LLM failed to process request: {e}. Please ensure your LLM provider is configured correctly and the API is accessible.")
 
-    def _fallback_extract_json(self, response: str, request: str) -> ParseResult:
-        """Simple fallback JSON extraction from LLM response
-
-        Args:
-            response: Raw LLM response
-            request: Original user request (for fallback parsing)
-
-        Returns:
-            ParseResult: Tuple containing (task_list, reasoning_string)
-        """
-        try:
-            # Try simple brace matching
-            start = response.find('{')
-            if start == -1:
-                logger.warning("No JSON object found in response")
-                return self._fallback_parse(request)
-
-            brace_count = 0
-            for i, char in enumerate(response[start:]):
-                brace_count += (char == '{') - (char == '}')
-                if brace_count == 0:
-                    json_str = response[start:start+i+1]
-                    parsed = TaskResponse.model_validate_json(json_str)
-                    tasks = [{"tool": task.tool, "content": task.content} for task in parsed.tasks]
-                    logger.info(f"Extracted {len(tasks)} tasks from malformed JSON")
-                    return tasks, parsed.reasoning
-
-            logger.warning("Could not extract valid JSON from response")
-            return self._fallback_parse(request)
-
-        except Exception as e:
-            logger.warning(f"JSON extraction failed: {e}")
-            return self._fallback_parse(request)
-
-    def _fallback_parse(self, request: str) -> ParseResult:
-        """Fallback parsing if LLM fails
-        
-        Uses rule-based parsing to extract tasks from user requests.
-        Handles various edge cases and provides structured fallback.
-        
-        Args:
-            request: User request string to parse
-            
-        Returns:
-            ParseResult: Tuple containing (task_list, reasoning_string)
-        """
-        if not request or not isinstance(request, str):
-            logger.warning("Invalid request in fallback parser")
-            return [], "Invalid request format"
-        
-        try:
-            tasks = []
-            reasoning = "Using rule-based fallback parsing"
-            request_lower = request.lower().strip()
-
-            # Email/draft detection with improved regex
-            if "email" in request_lower or "draft" in request_lower:
-                try:
-                    match = re.search(
-                        r"(?:draft|write|compose|create|email).*?(?:about|regarding|for|topic)\s+([^.,;]+)",
-                        request,
-                        re.IGNORECASE
-                    )
-                    if match:
-                        content = match.group(1).strip()
-                        if content:  # Only add if content is not empty
-                            tasks.append({"tool": "drafting_tool", "content": content})
-                except re.error as re_err:
-                    logger.error(f"Regex error in draft parsing: {re_err}")
-
-            # Reminder detection with improved regex
-            if "remind" in request_lower:
-                try:
-                    match = re.search(
-                        r"remind(?:\s+me)?\s+(?:to|about|that)\s+([^.,;]+)",
-                        request,
-                        re.IGNORECASE
-                    )
-                    if match:
-                        content = match.group(1).strip()
-                        if content:
-                            tasks.append({"tool": "reminder_tool", "content": content})
-                except re.error as re_err:
-                    logger.error(f"Regex error in reminder parsing: {re_err}")
-
-            # Search detection with improved regex and more keywords
-            search_keywords = ["search", "stock", "check", "look up", "find", "research", "query"]
-            if any(keyword in request_lower for keyword in search_keywords):
-                try:
-                    # More comprehensive search pattern
-                    pattern = r"(?:search|check|look\s+up|find|research|query|stock\s+price|market\s+data).*?(?:for|about|on|regarding)\s+([^.,;]+)"
-                    match = re.search(pattern, request, re.IGNORECASE)
-                    if match:
-                        content = match.group(1).strip()
-                        if content:
-                            tasks.append({"tool": "search_tool", "content": content})
-                except re.error as re_err:
-                    logger.error(f"Regex error in search parsing: {re_err}")
-
-            # If no specific tasks found, use generic search
-            if not tasks:
-                # Extract meaningful content from request
-                if len(request.split()) > 3:  # If request has more than 3 words
-                    content = " ".join(request.split()[:10])  # Take first 10 words
-                    tasks.append({"tool": "search_tool", "content": content})
-                else:
-                    tasks.append({"tool": "search_tool", "content": request})
-
-            # Remove duplicate tasks
-            seen_tasks = set()
-            unique_tasks = []
-            for task in tasks:
-                task_key = (task["tool"], task["content"])
-                if task_key not in seen_tasks:
-                    seen_tasks.add(task_key)
-                    unique_tasks.append(task)
-
-            logger.info(f"Fallback parser generated {len(unique_tasks)} tasks")
-            return unique_tasks, reasoning
-
-        except Exception as e:
-            logger.error(f"Fallback parsing failed: {e}", exc_info=True)
-            # Ultimate fallback - return empty tasks with error reasoning
-            return [], f"Parsing failed: {str(e)}"
