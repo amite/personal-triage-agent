@@ -164,29 +164,47 @@ def tool_execution_node(state: AgentState) -> AgentState:
     state["iteration"] += 1
 
     # Index draft if drafting_tool was executed
-    if tool_name == "drafting_tool" and isinstance(result, dict) and result.get("success"):
-        try:
-            draft_id = result.get("draft_id")
-            if draft_id:
-                thread_id = state.get("thread_id", "unknown")
-                checkpoint_id = None  # Can be enhanced later if checkpoint_id becomes accessible
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if tool_name == "drafting_tool":
+        logger.info(f"Drafting tool executed. Result type: {type(result)}, isinstance dict: {isinstance(result, dict)}")
+        if isinstance(result, dict):
+            logger.info(f"Result dict keys: {result.keys()}, success: {result.get('success')}, draft_id: {result.get('draft_id')}")
+        
+        if isinstance(result, dict) and result.get("success"):
+            try:
+                draft_id = result.get("draft_id")
+                logger.info(f"Starting indexing process for draft_id: {draft_id}")
                 
-                indexer = DraftIndexer()
-                success = indexer.index_draft_by_id(
-                    draft_id=draft_id,
-                    thread_id=thread_id,
-                    checkpoint_id=checkpoint_id
-                )
-                if success:
-                    import logging
-                    logging.getLogger(__name__).info(f"Successfully indexed draft ID {draft_id}")
+                if draft_id:
+                    thread_id = state.get("thread_id", "unknown")
+                    checkpoint_id = None  # Can be enhanced later if checkpoint_id becomes accessible
+                    
+                    logger.info(f"Initializing DraftIndexer for draft_id={draft_id}, thread_id={thread_id}")
+                    indexer = DraftIndexer()
+                    
+                    logger.info(f"Calling index_draft_by_id...")
+                    success = indexer.index_draft_by_id(
+                        draft_id=draft_id,
+                        thread_id=thread_id,
+                        checkpoint_id=checkpoint_id
+                    )
+                    
+                    if success:
+                        logger.info(f"✓ Successfully indexed draft ID {draft_id} in ChromaDB")
+                        console.print(f"[dim]  → Draft indexed in search database[/dim]")
+                    else:
+                        logger.warning(f"✗ Failed to index draft ID {draft_id} in ChromaDB")
+                        console.print(f"[yellow]  ⚠ Draft not indexed in search database[/yellow]")
                 else:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Failed to index draft ID {draft_id}")
-        except Exception as e:
-            # Log but don't fail the workflow if indexing fails
-            import logging
-            logging.getLogger(__name__).warning(f"Draft indexing failed: {e}", exc_info=True)
+                    logger.warning(f"Draft ID is None or empty, cannot index")
+            except Exception as e:
+                # Log but don't fail the workflow if indexing fails
+                logger.error(f"Draft indexing exception: {e}", exc_info=True)
+                console.print(f"[yellow]  ⚠ Draft indexing error: {e}[/yellow]")
+        else:
+            logger.info(f"Skipping indexing: success={result.get('success') if isinstance(result, dict) else 'N/A'}")
 
     return state
 
