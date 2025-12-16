@@ -1,72 +1,16 @@
-"""Factory for creating embedding functions (local or OpenAI)."""
+"""Factory for creating embedding functions (local or OpenAI).
+
+Note: ChromaDB expects embedding functions to conform to its internal interface,
+including `name()` and `get_config()` methods for persistence/config tracking.
+To avoid drift across Chroma versions, we prefer Chroma's built-in embedding
+function implementations.
+"""
 
 import os
 import logging
-from typing import List
+from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-
-class SentenceTransformerEmbeddingFunction:
-    """Local embedding using sentence-transformers."""
-
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        """Initialize sentence transformer model.
-
-        Args:
-            model_name: Model name from Hugging Face
-        """
-        try:
-            from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer(model_name)
-            logger.info(f"Loaded local embedding model: {model_name}")
-        except ImportError:
-            logger.error("sentence-transformers not installed")
-            raise
-
-    def __call__(self, texts: List[str]) -> List[List[float]]:
-        """Embed texts using sentence-transformers.
-
-        Args:
-            texts: List of texts to embed
-
-        Returns:
-            List of embedding vectors
-        """
-        return self.model.encode(texts).tolist()
-
-
-class OpenAIEmbeddingFunction:
-    """OpenAI embedding function (switchable for production)."""
-
-    def __init__(self, api_key: str, model: str = "text-embedding-3-small"):
-        """Initialize OpenAI embedding client.
-
-        Args:
-            api_key: OpenAI API key
-            model: Embedding model to use
-        """
-        try:
-            from openai import OpenAI
-            self.client = OpenAI(api_key=api_key)
-            self.model = model
-            logger.info(f"Initialized OpenAI embeddings with model: {model}")
-        except ImportError:
-            logger.error("openai not installed")
-            raise
-
-    def __call__(self, texts: List[str]) -> List[List[float]]:
-        """Embed texts using OpenAI.
-
-        Args:
-            texts: List of texts to embed
-
-        Returns:
-            List of embedding vectors
-        """
-        response = self.client.embeddings.create(input=texts, model=self.model)
-        return [item.embedding for item in response.data]
-
 
 class EmbeddingFactory:
     """Factory for creating embedding functions."""
@@ -83,15 +27,32 @@ class EmbeddingFactory:
             Embedding function (callable)
         """
         provider = os.getenv("EMBEDDING_PROVIDER", "local").lower()
+        openai_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        local_model = os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        local_device = os.getenv("LOCAL_EMBEDDING_DEVICE", "cpu")
 
         if provider == "openai":
-            api_key = os.getenv("OPENAI_API_KEY")
+            api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 logger.warning(
                     "OPENAI_API_KEY not set, falling back to local embeddings"
                 )
-                return SentenceTransformerEmbeddingFunction()
-            return OpenAIEmbeddingFunction(api_key=api_key)
+                provider = "local"
+            else:
+                from chromadb.utils import embedding_functions as ef
 
-        # Default: Local sentence transformers
-        return SentenceTransformerEmbeddingFunction()
+                # Prefer Chroma's built-in OpenAI embedding function to match
+                # required interface methods (name/get_config) for persistence.
+                return ef.OpenAIEmbeddingFunction(
+                    api_key=api_key,
+                    model_name=openai_model,
+                    api_key_env_var="OPENAI_API_KEY",
+                )
+
+        # Default: Local sentence transformers (via Chroma's built-in wrapper)
+        from chromadb.utils import embedding_functions as ef
+
+        return ef.SentenceTransformerEmbeddingFunction(
+            model_name=local_model,
+            device=local_device,
+        )
