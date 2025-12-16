@@ -3105,12 +3105,108 @@ Lines added: 4, lines removed: 1
 
 ---
 
-<tool-use data-tool-type="unknown" data-tool-name="read_lints">
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
 <details>
-<summary>Tool use: **read_lints**</summary>
+          <summary>Tool use: **read_lints** • Read lints for 1 file</summary>
+      
+Lint paths:
 
-Status: **loading**
+- `scripts/check_chromadb.py`
 
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd /home/amite/code/python/personal-triage-agent && uv run python -m scripts.check_chromadb</summary>
+
+```bash
+cd /home/amite/code/python/personal-triage-agent && uv run python -m scripts.check_chromadb
+```
+
+```
+✓ ChromaDB collection exists: email_drafts
+  Documents indexed: 5
+  Drafts in database: 2
+
+  Sample indexed documents: 3 shown
+    1. ID: draft_1765905003812... | Subject: Re: Draft an email to stakeholders about Q3 financ
+    2. ID: draft_1765905201608... | Subject: Re: Draft an email to stakeholders about Q3 financ
+    3. ID: draft_1765905201915... | Subject: Re: Draft a professional internal email about Q4 f
+
+```
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+Fixed and verified.
+
+## Fix
+
+The type checker couldn't guarantee that `doc_id` from `ids` is a string, so slicing `doc_id[:20]` triggered the error.
+
+**Solution:** Convert `doc_id` to a string before slicing:
+```python
+doc_id_str = str(doc_id) if doc_id else 'unknown'
+print(f'    {i}. ID: {doc_id_str[:20]}... | Subject: {subject_str[:50]}')
+```
+
+This ensures we always slice a string, even if the value is unexpected.
+
+**Verification:**
+- No linting errors
+- Script runs successfully
+- Output is correct
+
+The script now handles edge cases where `doc_id` might not be a string.
+
+---
+
+_**User (2025-12-16 12:12Z)**_
+
+add and commit
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+
+
+---
+
+
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd**</summary>
+
+</details>
+</tool-use>
+
+---
+
+
+
+---
+
+
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd**</summary>
 
 </details>
 </tool-use>
@@ -3128,14 +3224,6 @@ Status: **loading**
 
 
 ---
-
-_**User (2025-12-16 12:12Z)**_
-
-add and commit
-
----
-
-_**Agent (model default, mode Agent)**_
 
 
 
