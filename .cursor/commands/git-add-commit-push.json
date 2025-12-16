@@ -1,0 +1,6 @@
+{
+    "name": "Git: Add, Commit & Push",
+    "command": "bash .cursor/commands/git-add-commit-push.sh",
+    "description": "Adds all untracked/modified changes, commits with timestamp, and pushes to current branch",
+    "category": "git"
+}
