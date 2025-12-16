@@ -8,7 +8,10 @@ function implementations.
 
 import os
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from chromadb.api.types import EmbeddingFunction
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ class EmbeddingFactory:
         return EmbeddingFactory._detect_device()
 
     @staticmethod
-    def _create_openai_embedding_function(model_name: str) -> Optional[object]:
+    def _create_openai_embedding_function(model_name: str) -> Optional["EmbeddingFunction"]:
         """Create OpenAI embedding function if API key is available.
         
         Args:
@@ -83,7 +86,7 @@ class EmbeddingFactory:
         )
 
     @staticmethod
-    def _create_local_embedding_function(model_name: str, device: str) -> object:
+    def _create_local_embedding_function(model_name: str, device: str) -> "EmbeddingFunction":
         """Create local sentence transformer embedding function.
         
         Args:
@@ -102,7 +105,7 @@ class EmbeddingFactory:
         )
 
     @staticmethod
-    def get_embedding_function():
+    def get_embedding_function() -> "EmbeddingFunction":
         """Get embedding function based on EMBEDDING_PROVIDER env var.
 
         Environment variables:

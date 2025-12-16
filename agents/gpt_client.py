@@ -67,8 +67,43 @@ class GPTClient(LLMClientBase):
             
             response = self.client.responses.create(**create_params)
             
-            # SDK provides direct access to output text - no manual JSON parsing needed
-            return response.output_text.strip()
+            # Try direct SDK convenience property first (if available)
+            if hasattr(response, 'output_text') and response.output_text:
+                logger.debug(f"Using response.output_text property: {len(response.output_text)} chars")
+                return response.output_text.strip()
+            
+            # Fallback: Parse Responses API structure manually
+            # Structure: response.output (array) -> message items -> content array -> output_text items -> text
+            output_items = getattr(response, 'output', [])
+            
+            for item in output_items:
+                # Find message-type items
+                item_type = getattr(item, 'type', None) if hasattr(item, 'type') else (item.get("type") if isinstance(item, dict) else None)
+                
+                if item_type == "message":
+                    # Get content array from message item
+                    content_items = getattr(item, 'content', []) if hasattr(item, 'content') else (item.get("content", []) if isinstance(item, dict) else [])
+                    
+                    for content in content_items:
+                        # Check for output_text type
+                        content_type = getattr(content, 'type', None) if hasattr(content, 'type') else (content.get("type") if isinstance(content, dict) else None)
+                        
+                        if content_type in ["output_text", "text"]:
+                            # Extract text field
+                            text = getattr(content, 'text', None) if hasattr(content, 'text') else (content.get("text") if isinstance(content, dict) else None)
+                            
+                            if text:
+                                logger.debug(f"Extracted text from Responses API structure: {len(text)} chars")
+                                return text.strip()
+            
+            # If no text found, log for debugging
+            logger.error(f"No output_text found in Responses API response")
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response attributes: {dir(response)[:20]}...")  # First 20 to avoid spam
+            if output_items:
+                logger.debug(f"Output items count: {len(output_items)}")
+                logger.debug(f"First item type: {getattr(output_items[0], 'type', 'unknown')}")
+            raise ValueError("No output text found in Responses API response")
                 
         except APITimeoutError as e:
             error_msg = "OpenAI API request timed out."

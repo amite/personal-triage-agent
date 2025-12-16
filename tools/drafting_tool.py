@@ -2,9 +2,9 @@
 Drafting Tool - Generates and saves draft emails
 """
 
-import re
+import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from agents.llm_client_base import LLMClientBase
 
@@ -15,9 +15,24 @@ class DraftingTool:
     description = "Drafts an email based on the given topic or content. Use this when the user needs to write, compose, or draft an email or message."
 
     @staticmethod
-    def execute(content: str, llm_client: Optional[LLMClientBase] = None) -> str:
+    def execute(
+        content: str, 
+        llm_client: Optional[LLMClientBase] = None,
+        thread_id: Optional[str] = None,
+        checkpoint_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Execute drafting tool with database storage.
+        
+        Args:
+            content: Email topic or content
+            llm_client: Optional LLM client for generating email body
+            thread_id: Optional thread ID for linking to execution
+            checkpoint_id: Optional checkpoint ID
+        
+        Returns:
+            Dictionary with success, draft_id, subject, and message
+        """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        file_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Use LLM to generate email body
         if llm_client:
@@ -34,12 +49,15 @@ Email body:"""
         else:
             email_body = f"I wanted to reach out regarding {content}. Please let me know your thoughts at your earliest convenience."
 
+        # Extract subject from content
+        subject = f"Re: {content}"
+
         draft = f"""
 {'='*60}
 DRAFT EMAIL - {timestamp}
 {'='*60}
 
-Subject: Re: {content}
+Subject: {subject}
 
 Dear Recipient,
 
@@ -51,17 +69,28 @@ Best regards,
 {'='*60}
 """
 
+        # Create database record
         try:
-            # Create inbox/drafts directory if it doesn't exist
-            import os
-            os.makedirs("inbox/drafts", exist_ok=True)
-
-            # Create filename with timestamp
-            safe_content = re.sub(r'[^\w\s-]', '', content[:30]).strip()
-            filename = f"inbox/drafts/draft_{file_timestamp}_{safe_content}.txt"
-
-            with open(filename, "w") as f:
-                f.write(draft)
-            return f"✓ Email draft saved to {filename} about: '{content[:50]}...'"
+            from utils.artifacts_db import ArtifactsDB
+            
+            db = ArtifactsDB()
+            draft_id = db.create_draft(
+                thread_id=thread_id or "unknown",
+                body=draft,
+                subject=subject,
+                checkpoint_id=checkpoint_id
+            )
+            return {
+                "success": True,
+                "draft_id": draft_id,
+                "subject": subject,
+                "message": f"✓ Email draft created (ID: {draft_id}): '{subject}'"
+            }
         except Exception as e:
-            return f"✗ Failed to save draft: {str(e)}"
+            logging.error(f"Failed to create draft in database: {e}")
+            return {
+                "success": False,
+                "draft_id": None,
+                "subject": subject,
+                "message": f"✗ Failed to save draft: {str(e)}"
+            }

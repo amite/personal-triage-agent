@@ -127,34 +127,66 @@ def tool_execution_node(state: AgentState) -> AgentState:
             border_style="green"
         ))
 
+        # Get thread_id and checkpoint_id for tool execution
+        thread_id = state.get("thread_id", "unknown")
+        # Note: checkpoint_id is not easily accessible during execution,
+        # so we'll pass None for now. It can be added later if needed.
+        checkpoint_id = None
+
         # Execute tool
         if tool_name == "drafting_tool":
             llm_agent = LLMDraftingAgent()
-            result = llm_agent.execute(content)
+            result = llm_agent.execute(
+                content,
+                thread_id=thread_id,
+                checkpoint_id=checkpoint_id
+            )
+        elif tool_name == "reminder_tool":
+            result = tool_class.execute(
+                content,
+                thread_id=thread_id,
+                checkpoint_id=checkpoint_id
+            )
         else:
             result = tool_class.execute(content)
 
-    # Update state
-    state["results"][f"{tool_name}_{state['iteration']}"] = result
+    # Handle both string (legacy) and dict (new) return values
+    if isinstance(result, dict):
+        # New structured format
+        display_result = result.get("message", str(result))
+        state["results"][f"{tool_name}_{state['iteration']}"] = display_result
+    else:
+        # Legacy string format
+        state["results"][f"{tool_name}_{state['iteration']}"] = result
+    
     state["task_queue"].pop(0)
     state["agent_thoughts"].append(f"Executed {tool_name}: {content[:50]}")
     state["iteration"] += 1
 
     # Index draft if drafting_tool was executed
-    if tool_name == "drafting_tool" and "✓" in result:
+    if tool_name == "drafting_tool" and isinstance(result, dict) and result.get("success"):
         try:
-            # Extract file path from result string
-            import re as regex
-            file_match = regex.search(r"(inbox/drafts/draft_[^\s]+\.txt)", result)
-            if file_match:
-                file_path = file_match.group(1)
-                # Index draft with checkpoint metadata
+            draft_id = result.get("draft_id")
+            if draft_id:
+                thread_id = state.get("thread_id", "unknown")
+                checkpoint_id = None  # Can be enhanced later if checkpoint_id becomes accessible
+                
                 indexer = DraftIndexer()
-                indexer.index_draft_file(file_path, thread_id=state.get("thread_id", "unknown"))
+                success = indexer.index_draft_by_id(
+                    draft_id=draft_id,
+                    thread_id=thread_id,
+                    checkpoint_id=checkpoint_id
+                )
+                if success:
+                    import logging
+                    logging.getLogger(__name__).info(f"Successfully indexed draft ID {draft_id}")
+                else:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to index draft ID {draft_id}")
         except Exception as e:
             # Log but don't fail the workflow if indexing fails
             import logging
-            logging.getLogger(__name__).warning(f"Draft indexing failed: {e}")
+            logging.getLogger(__name__).warning(f"Draft indexing failed: {e}", exc_info=True)
 
     return state
 
@@ -500,7 +532,7 @@ def main():
     try:
         run_task_manager(user_input)
         console.print("\n[bold green]✓ Task processing complete![/bold green]")
-        console.print("[dim]Check inbox/reminders/ and inbox/drafts/ for saved outputs.[/dim]\n")
+        console.print("[dim]Artifacts saved to database: data/artifacts.db[/dim]\n")
     except Exception as e:
         console.print(f"\n[bold red]Error: {e}[/bold red]")
 

@@ -1874,7 +1874,99 @@ cd /home/amite/code/python/personal-triage-agent && git add utils/embedding_fact
 
 ---
 
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd /home/amite/code/python/personal-triage-agent && git status</summary>
 
+```bash
+cd /home/amite/code/python/personal-triage-agent && git status
+```
+
+```
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged &lt;file&gt;..." to unstage)
+	new file:   artifacts/wip/issues/phase-2-chromadb/chromadb-embedding-function-interface-fix.md
+	modified:   utils/embedding_factory.py
+
+Changes not staged for commit:
+  (use "git add &lt;file&gt;..." to update what will be committed)
+  (use "git restore &lt;file&gt;..." to discard changes in working directory)
+	modified:   .specstory/history/2025-12-16_13-15Z-option-14-draft-search-issue.md
+	modified:   agents/gpt_client.py
+
+Untracked files:
+  (use "git add &lt;file&gt;..." to include in what will be committed)
+	.specstory/history/2025-12-16_13-47Z-api-exception-hierarchy.md
+	.specstory/history/2025-12-16_13-49Z-app-example-14-behavior.md
+
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd /home/amite/code/python/personal-triage-agent && git commit -m "Fix ChromaDB embedding function interface (Example 14)" -m "Use Chroma built-in embedding_functions for name()/get_config() compatibility and document the fix."</summary>
+
+```bash
+cd /home/amite/code/python/personal-triage-agent && git commit -m "Fix ChromaDB embedding function interface (Example 14)" -m "Use Chroma built-in embedding_functions for name()/get_config() compatibility and document the fix."
+```
+
+```
+[main b6f096f] Fix ChromaDB embedding function interface (Example 14)
+ 2 files changed, 89 insertions(+), 69 deletions(-)
+ create mode 100644 artifacts/wip/issues/phase-2-chromadb/chromadb-embedding-function-interface-fix.md
+
+```
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd /home/amite/code/python/personal-triage-agent && git status</summary>
+
+```bash
+cd /home/amite/code/python/personal-triage-agent && git status
+```
+
+```
+On branch main
+Your branch is ahead of 'origin/main' by 1 commit.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add &lt;file&gt;..." to update what will be committed)
+  (use "git restore &lt;file&gt;..." to discard changes in working directory)
+	modified:   .specstory/history/2025-12-16_13-15Z-option-14-draft-search-issue.md
+	modified:   agents/gpt_client.py
+
+Untracked files:
+  (use "git add &lt;file&gt;..." to include in what will be committed)
+	.specstory/history/2025-12-16_13-47Z-api-exception-hierarchy.md
+	.specstory/history/2025-12-16_13-49Z-app-example-14-behavior.md
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+```
+</details>
+</tool-use>
+
+---
+
+### Commit done
+
+- **Committed**: `b6f096f` — **“Fix ChromaDB embedding function interface (Example 14)”**
+- **Included files**:
+  - `utils/embedding_factory.py`
+  - `artifacts/wip/issues/phase-2-chromadb/chromadb-embedding-function-interface-fix.md`
+
+### Notes
+- I **did not** include your unrelated local changes in `agents/gpt_client.py` or the `.specstory/history/*` files (they’re still uncommitted).
+- Your branch is now **ahead of `origin/main` by 1 commit** (ready to push when you want).
 
 ---
 

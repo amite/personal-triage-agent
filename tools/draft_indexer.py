@@ -18,6 +18,58 @@ class DraftIndexer:
         """Initialize draft indexer with ChromaDB manager."""
         self.chromadb = ChromaDBManager()
 
+    def index_draft_by_id(
+        self, 
+        draft_id: int, 
+        thread_id: str, 
+        checkpoint_id: Optional[str] = None
+    ) -> bool:
+        """Index a draft from database by ID.
+        
+        Args:
+            draft_id: Draft ID from artifacts database
+            thread_id: Thread ID for checkpoint lookup
+            checkpoint_id: Optional specific checkpoint ID
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from utils.artifacts_db import ArtifactsDB
+            
+            # Get draft from database
+            db = ArtifactsDB()
+            draft = db.get_draft(draft_id)
+            
+            if not draft:
+                logger.error(f"Draft not found: {draft_id}")
+                return False
+            
+            # Extract metadata
+            metadata = {
+                "draft_id": draft_id,
+                "subject": draft.get("subject", ""),
+                "timestamp": draft["created_at"],
+                "thread_id": thread_id,
+            }
+            
+            # Get checkpoint context
+            checkpoint_metadata = self._get_checkpoint_metadata(thread_id, checkpoint_id)
+            merged_metadata = {**metadata, **checkpoint_metadata}
+            
+            # Index in ChromaDB
+            doc_id = self.chromadb.index_draft(draft["body"], merged_metadata)
+            if doc_id:
+                logger.info(f"Successfully indexed draft ID {draft_id}")
+                return True
+            else:
+                logger.error(f"Failed to index draft ID {draft_id} in ChromaDB")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Exception while indexing draft {draft_id}: {e}")
+            return False
+
     def index_draft_file(
         self, file_path: str, thread_id: str, checkpoint_id: Optional[str] = None
     ) -> bool:

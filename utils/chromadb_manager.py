@@ -26,24 +26,56 @@ class ChromaDBManager:
         self._initialize()
 
     def _initialize(self):
-        """Initialize ChromaDB client and collection."""
+        """Initialize ChromaDB client and collection.
+        
+        Note: If the collection exists with a different embedding function than currently
+        configured, it will be deleted and recreated to ensure consistency with the
+        current EMBEDDING_PROVIDER setting.
+        """
         try:
             # Create persist directory if it doesn't exist
             os.makedirs(self.persist_directory, exist_ok=True)
 
-            # Get embedding function from factory
+            # Get embedding function from factory (based on EMBEDDING_PROVIDER env var)
             embedding_function = EmbeddingFactory.get_embedding_function()
 
             # Initialize ChromaDB with persistent storage
             self.client = chromadb.PersistentClient(path=self.persist_directory)
             logger.info(f"Initialized ChromaDB client with path: {self.persist_directory}")
 
-            # Get or create email_drafts collection
-            self.collection = self.client.get_or_create_collection(
-                name="email_drafts",
-                embedding_function=embedding_function,
-                metadata={"description": "Email drafts with semantic embeddings"},
-            )
+            # Try to get or create collection with current embedding function
+            try:
+                self.collection = self.client.get_or_create_collection(
+                    name="email_drafts",
+                    embedding_function=embedding_function,
+                    metadata={"description": "Email drafts with semantic embeddings"},
+                )
+            except ValueError as e:
+                error_msg = str(e).lower()
+                # Check if error is due to embedding function mismatch
+                if "embedding function" in error_msg and "already exists" in error_msg:
+                    # Collection exists with different embedding function
+                    # Delete and recreate to use current embedding function consistently
+                    logger.warning(
+                        "Collection exists with different embedding function. "
+                        "Deleting and recreating to use current embedding provider."
+                    )
+                    try:
+                        self.client.delete_collection(name="email_drafts")
+                    except Exception as delete_error:
+                        logger.warning(f"Error deleting collection (may not exist): {delete_error}")
+                    
+                    # Create new collection with current embedding function
+                    self.collection = self.client.create_collection(
+                        name="email_drafts",
+                        embedding_function=embedding_function,
+                        metadata={"description": "Email drafts with semantic embeddings"},
+                    )
+                    logger.info("Recreated email_drafts collection with current embedding function")
+                else:
+                    # Different error - re-raise
+                    raise
+            
             logger.info("Email drafts collection ready")
         except Exception as e:
             logger.error(f"Failed to initialize ChromaDB: {e}")
@@ -119,14 +151,19 @@ class ChromaDBManager:
 
             # Format results
             formatted_results = []
-            if results and results.get("ids"):
-                for i, doc_id in enumerate(results["ids"][0]):
+            if results and results.get("ids") and results["ids"][0]:
+                ids = results["ids"][0]
+                documents = results.get("documents")
+                metadatas = results.get("metadatas")
+                distances = results.get("distances")
+                
+                for i, doc_id in enumerate(ids):
                     formatted_results.append(
                         {
                             "id": doc_id,
-                            "document": results["documents"][0][i],
-                            "metadata": results["metadatas"][0][i],
-                            "distance": results["distances"][0][i],
+                            "document": documents[0][i] if documents and documents[0] else None,
+                            "metadata": metadatas[0][i] if metadatas and metadatas[0] else None,
+                            "distance": distances[0][i] if distances and distances[0] else None,
                         }
                     )
             logger.info(f"Search returned {len(formatted_results)} results for: {query}")

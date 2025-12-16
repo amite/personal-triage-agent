@@ -86,8 +86,11 @@ class SearchDraftsTool:
             if metadata.get("timestamp"):
                 output_lines.append(f"   📅 {metadata['timestamp']}")
 
-            if metadata.get("file_path"):
-                output_lines.append(f"   📄 {metadata['file_path']}")
+            # Show draft_id if available (new database-based), otherwise file_path (legacy)
+            if metadata.get("draft_id"):
+                output_lines.append(f"   🆔 Draft ID: {metadata['draft_id']}")
+            elif metadata.get("file_path"):
+                output_lines.append(f"   📄 {metadata['file_path']} (legacy)")
 
             if metadata.get("user_request"):
                 output_lines.append(f"   🎯 Request: {metadata['user_request'][:80]}...")

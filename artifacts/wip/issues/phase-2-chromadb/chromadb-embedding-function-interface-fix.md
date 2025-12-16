@@ -52,8 +52,59 @@ Expected outcome:
 - No crash during ChromaDB init
 - Output contains a “No drafts found …” message (when there are no matching drafts indexed)
 
+## Embedding Function Consistency Fix (2025-12-16)
+
+### Problem: Embedding Function Conflict
+
+After the initial fix, a new issue was discovered during Phase 2 testing:
+- ChromaDB collections cannot change their embedding function after creation
+- If a collection was created with one embedding provider (e.g., `openai`) and the code later tries to use a different provider (e.g., `local`), ChromaDB raises a `ValueError`
+- Error message: `"An embedding function already exists in the collection configuration, and a new one is provided"`
+
+This caused indexing to fail when:
+1. Collection was created with OpenAI embeddings (when `EMBEDDING_PROVIDER=openai`)
+2. Later runs tried to use local embeddings (default `EMBEDDING_PROVIDER=local`)
+3. ChromaDB rejected the mismatch, preventing draft indexing
+
+### Solution: Automatic Collection Recreation
+
+Updated `utils/chromadb_manager.py` to handle embedding function conflicts gracefully:
+
+1. **Detection**: When `get_or_create_collection()` raises a `ValueError` due to embedding function mismatch
+2. **Recovery**: Automatically delete the existing collection and recreate it with the current embedding function
+3. **Consistency**: Ensures the collection always matches the current `EMBEDDING_PROVIDER` environment variable setting
+
+**Implementation details:**
+- Wrapped `get_or_create_collection()` in try/except to catch `ValueError`
+- Check error message for "embedding function" and "already exists" keywords
+- Delete existing collection using `client.delete_collection()`
+- Recreate collection with current embedding function from `EmbeddingFactory.get_embedding_function()`
+- Log warning message when recreation occurs
+
+### Behavior
+
+- **First run**: Collection created with current embedding provider
+- **Provider change**: If `EMBEDDING_PROVIDER` changes, collection is automatically recreated on next initialization
+- **Warning**: Previously indexed drafts are lost when collection is recreated (expected behavior, as embeddings are provider-specific)
+- **Consistency**: Once recreated, collection uses the same embedding function consistently until provider changes
+
+### Code Location
+
+**File**: `utils/chromadb_manager.py`
+**Method**: `ChromaDBManager._initialize()`
+**Lines**: ~45-75
+
+### Testing
+
+Verified with Phase 2 Test 2:
+- Draft creation works correctly
+- Indexing no longer fails with embedding function conflicts
+- Collection automatically uses current `EMBEDDING_PROVIDER` setting
+- Warning logged when collection is recreated: `"Collection exists with different embedding function. Deleting and recreating to use current embedding provider."`
+
 ## Docs consulted
 - Context7: `/chroma-core/chroma` embedding function docs (custom `EmbeddingFunction` via `__call__`)
-- Runtime inspection in the project’s `uv` environment confirmed ChromaDB `1.3.7` requires `name()` and `get_config()` methods on embedding functions used for persisted collections.
+- Runtime inspection in the project's `uv` environment confirmed ChromaDB `1.3.7` requires `name()` and `get_config()` methods on embedding functions used for persisted collections.
+- Context7: OpenAI Python library documentation for Responses API structure and response parsing
 
 

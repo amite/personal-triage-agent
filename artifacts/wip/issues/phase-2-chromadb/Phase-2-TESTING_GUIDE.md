@@ -2,7 +2,7 @@
 
 **Purpose:** Manual testing procedures for Phase 2 semantic search functionality
 **Target:** QA, developers, and product managers
-**Scope:** Search drafts tool, indexing, ChromaDB integration, metadata correlation
+**Scope:** Search drafts tool, indexing, ChromaDB integration, artifacts database, metadata correlation
 **Duration:** 30-45 minutes for full test suite
 
 ---
@@ -22,6 +22,9 @@ uv run python -c "import chromadb; import sentence_transformers; print('✓ Depe
 
 # Check examples loaded
 uv run python -c "from utils.example_loader import ExampleLoader; loader = ExampleLoader(); print(f'✓ {len(loader.examples)} examples loaded')"
+
+# Check artifacts database module
+uv run python -c "from utils.artifacts_db import ArtifactsDB; print('✓ Artifacts database module available')"
 ```
 
 ### Initial State Check
@@ -29,9 +32,22 @@ uv run python -c "from utils.example_loader import ExampleLoader; loader = Examp
 # Clean ChromaDB for fresh testing (optional)
 rm -rf data/chromadb/
 
+# Clean artifacts database for fresh testing (optional)
+rm -f data/artifacts.db
+
 # Verify CLI starts
 timeout 3 uv run main.py || true
 # Should see welcome banner and 29 examples listed
+```
+
+### Verify Database Setup
+```bash
+# Check artifacts database is created on first run
+uv run python -c "from utils.artifacts_db import ArtifactsDB; db = ArtifactsDB(); print('✓ Artifacts database initialized')"
+
+# Verify database schema
+uv run python -c "import sqlite3; conn = sqlite3.connect('data/artifacts.db'); cursor = conn.cursor(); cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table'\"); tables = [row[0] for row in cursor.fetchall()]; print(f'✓ Tables: {tables}'); conn.close()"
+# Should show: ['reminders', 'drafts']
 ```
 
 ---
@@ -47,9 +63,12 @@ timeout 3 uv run main.py || true
 | **Test 4** | 10 min | Medium | Multiple sequential searches |
 | **Test 5** | 10 min | Medium | Complex multi-draft workflow |
 | **Test 6** | 10 min | Hard | Semantic search quality test |
-| **Persistence Test** | 5 min | Easy | Data survives across sessions |
+| **Test 7** | 5 min | Easy | Artifacts database verification |
+| **Test 8** | 5 min | Easy | Data persists across sessions |
+| **Test 9** | 5 min | Easy | Backward compatibility check |
+| **Test 10** | 5 min | Medium | Error handling & edge cases |
 
-**Total Time:** ~50 minutes for full suite
+**Total Time:** ~60 minutes for full suite
 
 ---
 
@@ -66,10 +85,10 @@ Verify the system starts without errors and CLI displays correctly.
    ```
 
 2. **Verify Output**
-   - [ ] Welcome banner displays
-   - [ ] LLM provider detected (GPT or Ollama)
-   - [ ] 29 examples listed with complexity markers
-   - [ ] "Enter your request" prompt appears
+   - [x ] Welcome banner displays
+   - [x] LLM provider detected (GPT or Ollama)
+   - [x] 29 examples listed with complexity markers
+   - [x] "Enter your request" prompt appears
 
 3. **Exit**
    ```
@@ -100,16 +119,16 @@ Verify search_drafts_tool handles queries gracefully when no drafts exist.
    (Or press Enter, then input `14`)
 
 3. **Verify Execution**
-   - [ ] CLI shows "📚 Draft Search Agent" panel
-   - [ ] Executing: "Search my drafts about budget approval..."
-   - [ ] LLM triage identifies task: `search_drafts_tool`
-   - [ ] Tool executes successfully
+   - [x] CLI shows "📚 Draft Search Agent" panel
+   - [x] Executing: "Search my drafts about budget approval..."
+   - [x] LLM triage identifies task: `search_drafts_tool`
+   - [x] Tool executes successfully
 
 4. **Check Results**
-   - [ ] Result displayed in summary table
-   - [ ] Message: "No drafts found matching your search for: 'budget approval'"
-   - [ ] No errors in console
-   - [ ] Task marked as complete
+   - [x] Result displayed in summary table
+   - [x] Message: "No drafts found matching your search for: 'budget approval'"
+   - [x] No errors in console
+   - [x] Task marked as complete
 
 ### Expected Output
 ```
@@ -145,15 +164,66 @@ Verify that drafting_tool execution automatically triggers DraftIndexer.
 
 3. **Verify Draft Creation**
    - [ ] "✉️ Drafting Agent" panel displays
-   - [ ] Draft file created (check output for filename)
-   - [ ] Result shows checkmark: "✓ Draft saved to..."
+   - [ ] Result shows checkmark: "✓ Email draft created (ID: [draft_id]): '[subject]'"
+   - [ ] Draft ID is displayed in the result message
 
-4. **Verify Indexing Happened**
+4. **Verify Database Record Created**
+   - [ ] Artifacts database contains the draft record
+   - [ ] Draft ID is valid (can be queried from database)
+   - [ ] Thread ID is linked to the draft
+   
+   **Query Commands:**
+   ```bash
+   # Get draft by ID (replace 1 with actual draft ID from output)
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   draft = db.get_draft(1)
+   if draft:
+       print(f'✓ Draft ID 1 found: {draft[\"subject\"]}')
+       print(f'  Thread ID: {draft[\"thread_id\"]}')
+       print(f'  Created: {draft[\"created_at\"]}')
+   else:
+       print('✗ Draft ID 1 not found')
+   "
+   
+   # List all drafts
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   drafts = db.get_drafts_by_thread('unknown')
+   print(f'✓ Found {len(drafts)} draft(s)')
+   for d in drafts:
+       print(f'  - ID {d[\"id\"]}: {d[\"subject\"]} (thread: {d[\"thread_id\"]})')
+   "
+   ```
+
+5. **Verify Indexing Happened**
    - [ ] No errors in console about indexing
    - [ ] (Optional) Check logs for "indexing" messages
    - [ ] ChromaDB collection should be created
+   
+   **Query Commands:**
+   ```bash
+   # Check ChromaDB collection exists and has documents
+   uv run python -c "
+   from utils.chromadb_manager import ChromaDBManager
+   manager = ChromaDBManager()
+   collection = manager.get_collection()
+   if collection:
+       count = manager.get_draft_count()
+       print(f'✓ ChromaDB collection exists: email_drafts')
+       print(f'  Documents indexed: {count}')
+   else:
+       print('✗ ChromaDB collection not found')
+   "
+   
+   # Check ChromaDB directory exists
+   ls -la data/chromadb/
+   # Should show database files (chroma.sqlite3, etc.)
+   ```
 
-5. **Verify Search Executes**
+6. **Verify Search Executes**
    - [ ] "📚 Draft Search Agent" panel displays
    - [ ] Search executes (not skipped)
    - [ ] Results show the draft we just created
@@ -162,7 +232,7 @@ Verify that drafting_tool execution automatically triggers DraftIndexer.
 ```
 ✉️ Drafting Agent
 Executing: Draft an email about Q4 financial planning...
-✓ Draft saved to inbox/drafts/draft_[timestamp].txt
+✓ Email draft created (ID: 1): 'Re: Q4 financial planning and budgets'
 
 [then]
 
@@ -170,9 +240,9 @@ Executing: Draft an email about Q4 financial planning...
 Executing: Search my drafts about budget...
 📧 Search Results for: 'budget'
 Found 1 matching drafts:
-  1. Subject: Q4 Financial Planning and Budgets
+  1. Subject: Re: Q4 financial planning and budgets
      📅 [timestamp]
-     📄 inbox/drafts/draft_[timestamp].txt
+     🆔 Draft ID: 1
      🎯 Request: Draft an email about Q4...
      💬 Preview: [first 150 chars of draft]
      ✅ Relevance: [score]%
@@ -197,15 +267,55 @@ Confirm that indexed drafts contain complete metadata.
    Search results should include:
    - [ ] Subject line extracted correctly
    - [ ] Timestamp present and formatted
-   - [ ] File path showing inbox/drafts/draft_*.txt
+   - [ ] Draft ID displayed
    - [ ] User request summary shown
    - [ ] Preview text present (first ~150 chars)
    - [ ] Relevance score calculated (0-100%)
 
-3. **Check ChromaDB Directly (Optional)**
+3. **Verify Database Record (Optional)**
    ```bash
+   # Check draft exists in artifacts database
+   uv run python -c "from utils.artifacts_db import ArtifactsDB; db = ArtifactsDB(); drafts = db.get_drafts_by_thread('unknown'); print(f'✓ Found {len(drafts)} draft(s) in database')"
+   
+   # Get specific draft with all metadata
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   drafts = db.get_drafts_by_thread('unknown')
+   if drafts:
+       d = drafts[0]
+       print(f'✓ Draft ID {d[\"id\"]}:')
+       print(f'  Subject: {d[\"subject\"]}')
+       print(f'  Created: {d[\"created_at\"]}')
+       print(f'  Status: {d[\"status\"]}')
+       print(f'  Body preview: {d[\"body\"][:100]}...')
+   "
+   ```
+
+4. **Check ChromaDB Directly (Optional)**
+   ```bash
+   # Check ChromaDB directory and files
    ls -la data/chromadb/
-   # Should see database files created
+   # Should see database files created (chroma.sqlite3, etc.)
+   
+   # Check ChromaDB collection and document count
+   uv run python -c "
+   from utils.chromadb_manager import ChromaDBManager
+   manager = ChromaDBManager()
+   collection = manager.get_collection()
+   if collection:
+       count = manager.get_draft_count()
+       print(f'✓ ChromaDB collection: email_drafts')
+       print(f'  Total documents: {count}')
+       
+       # Get sample document IDs
+       if count > 0:
+           results = collection.get(limit=1)
+           if results['ids']:
+               print(f'  Sample document ID: {results[\"ids\"][0]}')
+   else:
+       print('✗ ChromaDB collection not initialized')
+   "
    ```
 
 ### Expected Result
@@ -314,21 +424,23 @@ Test creation of multiple drafts followed by semantic search.
 ```
 ✉️ Drafting Agent
 Executing: Draft an email about the new product roadmap...
-✓ Draft saved to inbox/drafts/draft_[timestamp1].txt
+✓ Email draft created (ID: 1): 'Re: the new product roadmap'
 
 ✉️ Drafting Agent
 Executing: Draft a follow-up email about timeline expectations...
-✓ Draft saved to inbox/drafts/draft_[timestamp2].txt
+✓ Email draft created (ID: 2): 'Re: timeline expectations'
 
 📚 Draft Search Agent
 Executing: Search my drafts about product strategy...
 📧 Search Results for: 'product strategy'
 Found 2 matching drafts:
-  1. Subject: New Product Roadmap Email
+  1. Subject: Re: the new product roadmap
+     🆔 Draft ID: 1
      ...
      ✅ Relevance: 85.2%
 
-  2. Subject: Timeline Expectations Follow-up
+  2. Subject: Re: timeline expectations
+     🆔 Draft ID: 2
      ...
      ✅ Relevance: 78.4%
 ```
@@ -390,7 +502,142 @@ Found X matching drafts:
 
 ---
 
-## Test 7: Persistence Test
+## Test 7: Artifacts Database Verification
+
+### Objective
+Verify that artifacts (drafts and reminders) are properly stored in the SQLite database.
+
+### Steps
+
+1. **Run CLI and Create Artifacts**
+   ```bash
+   uv run main.py
+   ```
+   - Select Example 15 (creates a draft)
+   - Note the draft ID from the output
+
+2. **Verify Draft in Database**
+   ```bash
+   # Query database directly - list all drafts
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   drafts = db.get_drafts_by_thread('unknown')
+   print(f'✓ Found {len(drafts)} draft(s) in database')
+   for draft in drafts:
+       print(f'  - ID {draft[\"id\"]}: {draft[\"subject\"]} (created: {draft[\"created_at\"]})')
+   "
+   
+   # Get specific draft by ID (replace 1 with actual draft ID)
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   draft = db.get_draft(1)
+   if draft:
+       print(f'✓ Draft ID 1 details:')
+       print(f'  Subject: {draft[\"subject\"]}')
+       print(f'  Thread ID: {draft[\"thread_id\"]}')
+       print(f'  Created: {draft[\"created_at\"]}')
+       print(f'  Status: {draft[\"status\"]}')
+       print(f'  Body length: {len(draft[\"body\"])} chars')
+   else:
+       print('✗ Draft ID 1 not found')
+   "
+   
+   # Query using SQL directly for more control
+   uv run python -c "
+   import sqlite3
+   conn = sqlite3.connect('data/artifacts.db')
+   conn.row_factory = sqlite3.Row
+   cursor = conn.cursor()
+   cursor.execute('SELECT * FROM drafts ORDER BY created_at DESC LIMIT 5')
+   drafts = cursor.fetchall()
+   print(f'✓ Latest {len(drafts)} draft(s):')
+   for d in drafts:
+       print(f'  - ID {d[\"id\"]}: {d[\"subject\"]} (thread: {d[\"thread_id\"]}, created: {d[\"created_at\"]})')
+   conn.close()
+   "
+   ```
+   - [ ] Draft record exists in database
+   - [ ] Draft ID matches what was displayed
+   - [ ] Subject line is correct
+   - [ ] Thread ID is set (even if "unknown")
+   - [ ] Created timestamp is present
+
+3. **Create Reminder and Verify**
+   ```bash
+   uv run main.py
+   ```
+   - Select Example 1 (or any with reminder_tool)
+   - Note the reminder ID from the output
+
+4. **Verify Reminder in Database**
+   ```bash
+   # List all reminders
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   reminders = db.get_reminders_by_thread('unknown')
+   print(f'✓ Found {len(reminders)} reminder(s) in database')
+   for reminder in reminders:
+       print(f'  - ID {reminder[\"id\"]}: {reminder[\"content\"]} (status: {reminder[\"status\"]})')
+   "
+   
+   # Get specific reminder by ID (replace 1 with actual reminder ID)
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   reminder = db.get_reminder(1)
+   if reminder:
+       print(f'✓ Reminder ID 1 details:')
+       print(f'  Content: {reminder[\"content\"]}')
+       print(f'  Status: {reminder[\"status\"]}')
+       print(f'  Thread ID: {reminder[\"thread_id\"]}')
+       print(f'  Created: {reminder[\"created_at\"]}')
+       if reminder.get('due_date'):
+           print(f'  Due: {reminder[\"due_date\"]}')
+   else:
+       print('✗ Reminder ID 1 not found')
+   "
+   ```
+   - [ ] Reminder record exists in database
+   - [ ] Reminder ID matches what was displayed
+   - [ ] Content is correct
+   - [ ] Status is "pending" (default)
+   - [ ] Thread ID is set
+
+5. **Verify Database Schema**
+   ```bash
+   uv run python -c "
+   import sqlite3
+   conn = sqlite3.connect('data/artifacts.db')
+   cursor = conn.cursor()
+   
+   # Check tables exist
+   cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")
+   tables = [row[0] for row in cursor.fetchall()]
+   print(f'✓ Tables: {tables}')
+   assert 'drafts' in tables
+   assert 'reminders' in tables
+   
+   # Check indexes exist
+   cursor.execute(\"SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'\")
+   indexes = [row[0] for row in cursor.fetchall()]
+   print(f'✓ Indexes: {len(indexes)} found')
+   
+   conn.close()
+   print('✓ Database schema verified')
+   "
+   ```
+   - [ ] Both `drafts` and `reminders` tables exist
+   - [ ] Indexes are created
+
+### Expected Result
+✅ **PASS**: All artifacts stored in database, schema correct, records queryable
+
+---
+
+## Test 8: Persistence Test
 
 ### Objective
 Verify that indexed drafts persist across CLI sessions.
@@ -402,7 +649,7 @@ Verify that indexed drafts persist across CLI sessions.
    uv run main.py
    ```
    - Select Example 15 (creates and searches for draft)
-   - Note the draft created (e.g., draft_20251216_120530.txt)
+   - Note the draft ID created (e.g., "✓ Email draft created (ID: 1)")
    - Exit CLI
 
 2. **Run Second Session**
@@ -420,31 +667,94 @@ Verify that indexed drafts persist across CLI sessions.
    - [ ] Draft from first session is STILL found
    - [ ] Results show the draft we created in session 1
    - [ ] ChromaDB persisted data across sessions
+   - [ ] Artifacts database persisted data across sessions
    - [ ] Metadata intact
 
-5. **Verify ChromaDB Files**
+5. **Verify Database Persistence**
    ```bash
+   # Check artifacts database exists and contains data
+   ls -la data/artifacts.db
+   # Should show database file
+
+   # Query database directly - count all drafts
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   drafts = db.get_drafts_by_thread('unknown')
+   print(f'✓ Found {len(drafts)} draft(s) in database')
+   if drafts:
+       print('  Latest drafts:')
+       for d in drafts[:3]:
+           print(f'    - ID {d[\"id\"]}: {d[\"subject\"]} ({d[\"created_at\"]})')
+   "
+   
+   # Check database file size
+   du -sh data/artifacts.db
+   # Should show non-zero size
+   
+   # Verify specific draft from previous session still exists
+   uv run python -c "
+   from utils.artifacts_db import ArtifactsDB
+   db = ArtifactsDB()
+   # Replace 1 with the draft ID from session 1
+   draft = db.get_draft(1)
+   if draft:
+       print(f'✓ Draft from session 1 still exists: ID {draft[\"id\"]} - {draft[\"subject\"]}')
+   else:
+       print('✗ Draft from session 1 not found')
+   "
+   ```
+   - [ ] Database file exists
+   - [ ] Contains draft records from previous session
+
+6. **Verify ChromaDB Files**
+   ```bash
+   # Check ChromaDB directory exists
    ls -la data/chromadb/
-   # Should show database files
+   # Should show database files (chroma.sqlite3, etc.)
 
    # Check file sizes increased
    du -sh data/chromadb/
+   # Should show non-zero size
+   
+   # Verify ChromaDB collection persisted and has documents
+   uv run python -c "
+   from utils.chromadb_manager import ChromaDBManager
+   manager = ChromaDBManager()
+   collection = manager.get_collection()
+   if collection:
+       count = manager.get_draft_count()
+       print(f'✓ ChromaDB collection persisted: email_drafts')
+       print(f'  Total indexed documents: {count}')
+       
+       # Get sample documents to verify data
+       if count > 0:
+           results = collection.get(limit=min(3, count))
+           print(f'  Sample document IDs: {results[\"ids\"]}')
+           if results.get('metadatas'):
+               print(f'  Sample metadata:')
+               for i, meta in enumerate(results['metadatas'][:2]):
+                   print(f'    - {results[\"ids\"][i]}: draft_id={meta.get(\"draft_id\")}, subject={meta.get(\"subject\", \"N/A\")[:50]}')
+   else:
+       print('✗ ChromaDB collection not found')
+   "
    ```
    - [ ] Directory exists
    - [ ] Contains database files
    - [ ] Files are not empty
+   - [ ] Collection contains indexed documents from previous session
 
 ### Expected Output
 ```
 [Session 1]
-✓ Draft saved to inbox/drafts/draft_20251216_120530.txt
+✓ Email draft created (ID: 1): 'Re: Q4 financial planning and budgets'
 
 [Session 2, Example 14]
 📧 Search Results for: 'budget approval'
 Found 1 matching drafts:
-  1. Subject: Q4 Financial Planning and Budgets
+  1. Subject: Re: Q4 financial planning and budgets
      📅 2025-12-16 12:05:30
-     📄 inbox/drafts/draft_20251216_120530.txt
+     🆔 Draft ID: 1
      ✅ Relevance: 92.3%
 ```
 
@@ -453,7 +763,7 @@ Found 1 matching drafts:
 
 ---
 
-## Test 8: Backward Compatibility Check
+## Test 9: Backward Compatibility Check
 
 ### Objective
 Verify Phase 2 changes don't break existing Phase 1 functionality.
@@ -466,8 +776,10 @@ Verify Phase 2 changes don't break existing Phase 1 functionality.
    ```
    Select Example 1 (or any with reminder_tool)
    - [ ] Reminder tool executes
-   - [ ] File created in inbox/reminders/
+   - [ ] Result shows: "✓ Reminder created (ID: [id]): '[content]'"
+   - [ ] Reminder record created in artifacts database
    - [ ] No errors related to Phase 2 components
+   - [ ] Verify database: `uv run python -c "from utils.artifacts_db import ArtifactsDB; db = ArtifactsDB(); reminders = db.get_reminders_by_thread('unknown'); print(f'✓ Found {len(reminders)} reminder(s)')"`
 
 2. **Test Drafting Tool (Without Search)**
    ```bash
@@ -475,8 +787,11 @@ Verify Phase 2 changes don't break existing Phase 1 functionality.
    ```
    Select Example 2 (or 19-20 with single drafting_tool)
    - [ ] Draft created successfully
+   - [ ] Result shows: "✓ Email draft created (ID: [id]): '[subject]'"
+   - [ ] Draft record created in artifacts database
    - [ ] Auto-indexing happens silently (no visible errors)
    - [ ] Drafting completes as expected
+   - [ ] Verify database: `uv run python -c "from utils.artifacts_db import ArtifactsDB; db = ArtifactsDB(); drafts = db.get_drafts_by_thread('unknown'); print(f'✓ Found {len(drafts)} draft(s)')"`
 
 3. **Test External Search Tool**
    ```bash
@@ -501,7 +816,7 @@ Verify Phase 2 changes don't break existing Phase 1 functionality.
 
 ---
 
-## Test 9: Error Handling & Edge Cases
+## Test 10: Error Handling & Edge Cases
 
 ### Objective
 Verify graceful handling of errors and edge cases.
@@ -518,15 +833,20 @@ Verify graceful handling of errors and edge cases.
    - [ ] Graceful "No drafts found" message
    - [ ] CLI continues normally
 
-2. **Corrupted/Missing Draft File**
+2. **Database Connection Issues**
    ```bash
-   # Create a search query that references a non-existent draft
+   # Test with database locked or missing
+   chmod 000 data/artifacts.db 2>/dev/null || true
    uv run main.py
-   > 14
+   > 15
    ```
-   - [ ] Search handles gracefully
+   - [ ] Handles database errors gracefully
    - [ ] No unhandled exceptions
-   - [ ] Error logged (check console)
+   - [ ] Error message helpful
+   ```bash
+   # Restore database access
+   chmod 644 data/artifacts.db 2>/dev/null || true
+   ```
 
 3. **Network Issues (OpenAI embeddings)**
    ```bash
@@ -611,8 +931,13 @@ uv run main.py
 
 ### Check Disk Usage
 ```bash
+# Check ChromaDB size
 du -sh data/chromadb/
 # Expected: < 50 MB for reasonable number of drafts
+
+# Check artifacts database size
+du -sh data/artifacts.db
+# Expected: < 10 MB for reasonable number of artifacts
 ```
 
 ---
@@ -630,9 +955,10 @@ du -sh data/chromadb/
 | Test 4: Multiple Searches | ✅ / ❌ | ___ min | |
 | Test 5: Complex Workflow | ✅ / ❌ | ___ min | |
 | Test 6: Semantic Search | ✅ / ❌ | ___ min | |
-| Test 7: Persistence | ✅ / ❌ | ___ min | |
-| Test 8: Backward Compatibility | ✅ / ❌ | ___ min | |
-| Test 9: Error Handling | ✅ / ❌ | ___ min | |
+| Test 7: Artifacts Database | ✅ / ❌ | ___ min | |
+| Test 8: Persistence | ✅ / ❌ | ___ min | |
+| Test 9: Backward Compatibility | ✅ / ❌ | ___ min | |
+| Test 10: Error Handling | ✅ / ❌ | ___ min | |
 
 ### Issues Found
 
@@ -647,6 +973,191 @@ du -sh data/chromadb/
 - **Failed:** __ ❌
 - **Blockers:** None / ___
 - **Recommendation:** **PASS** / **FAIL** / **CONDITIONAL**
+
+---
+
+## Database Query Reference
+
+### Quick Reference Commands
+
+#### Artifacts Database (SQLite) Queries
+
+**List all drafts:**
+```bash
+uv run python -c "
+from utils.artifacts_db import ArtifactsDB
+db = ArtifactsDB()
+drafts = db.get_drafts_by_thread('unknown')
+print(f'Total drafts: {len(drafts)}')
+for d in drafts:
+    print(f'  ID {d[\"id\"]}: {d[\"subject\"]} ({d[\"created_at\"]})')
+"
+```
+
+**Get specific draft by ID:**
+```bash
+# Replace 1 with actual draft ID
+uv run python -c "
+from utils.artifacts_db import ArtifactsDB
+db = ArtifactsDB()
+draft = db.get_draft(1)
+if draft:
+    print(f'Draft ID {draft[\"id\"]}:')
+    print(f'  Subject: {draft[\"subject\"]}')
+    print(f'  Thread ID: {draft[\"thread_id\"]}')
+    print(f'  Created: {draft[\"created_at\"]}')
+    print(f'  Status: {draft[\"status\"]}')
+    print(f'  Body length: {len(draft[\"body\"])} chars')
+"
+```
+
+**List all reminders:**
+```bash
+uv run python -c "
+from utils.artifacts_db import ArtifactsDB
+db = ArtifactsDB()
+reminders = db.get_reminders_by_thread('unknown')
+print(f'Total reminders: {len(reminders)}')
+for r in reminders:
+    print(f'  ID {r[\"id\"]}: {r[\"content\"][:50]}... (status: {r[\"status\"]})')
+"
+```
+
+**Get specific reminder by ID:**
+```bash
+# Replace 1 with actual reminder ID
+uv run python -c "
+from utils.artifacts_db import ArtifactsDB
+db = ArtifactsDB()
+reminder = db.get_reminder(1)
+if reminder:
+    print(f'Reminder ID {reminder[\"id\"]}:')
+    print(f'  Content: {reminder[\"content\"]}')
+    print(f'  Status: {reminder[\"status\"]}')
+    print(f'  Thread ID: {reminder[\"thread_id\"]}')
+"
+```
+
+**Direct SQL queries:**
+```bash
+# Count all drafts
+uv run python -c "
+import sqlite3
+conn = sqlite3.connect('data/artifacts.db')
+cursor = conn.cursor()
+cursor.execute('SELECT COUNT(*) FROM drafts')
+print(f'Total drafts: {cursor.fetchone()[0]}')
+conn.close()
+"
+
+# Get drafts with full details
+uv run python -c "
+import sqlite3
+conn = sqlite3.connect('data/artifacts.db')
+conn.row_factory = sqlite3.Row
+cursor = conn.cursor()
+cursor.execute('SELECT id, subject, thread_id, created_at, status FROM drafts ORDER BY created_at DESC LIMIT 10')
+for row in cursor.fetchall():
+    print(f'ID {row[\"id\"]}: {row[\"subject\"]} (thread: {row[\"thread_id\"]}, {row[\"created_at\"]})')
+conn.close()
+"
+```
+
+#### ChromaDB Queries
+
+**Check collection exists and get document count:**
+```bash
+uv run python -c "
+from utils.chromadb_manager import ChromaDBManager
+manager = ChromaDBManager()
+collection = manager.get_collection()
+if collection:
+    count = manager.get_draft_count()
+    print(f'✓ Collection: email_drafts')
+    print(f'  Total documents: {count}')
+else:
+    print('✗ Collection not found')
+"
+```
+
+**Get sample documents from ChromaDB:**
+```bash
+uv run python -c "
+from utils.chromadb_manager import ChromaDBManager
+manager = ChromaDBManager()
+collection = manager.get_collection()
+if collection:
+    count = manager.get_draft_count()
+    if count > 0:
+        results = collection.get(limit=min(5, count))
+        print(f'Sample documents ({len(results[\"ids\"])}):')
+        for i, doc_id in enumerate(results['ids']):
+            meta = results['metadatas'][i] if results.get('metadatas') else {}
+            print(f'  - {doc_id}: draft_id={meta.get(\"draft_id\")}, subject={meta.get(\"subject\", \"N/A\")[:50]}')
+    else:
+        print('No documents in collection')
+"
+```
+
+**Search ChromaDB directly (test semantic search):**
+```bash
+uv run python -c "
+from utils.chromadb_manager import ChromaDBManager
+manager = ChromaDBManager()
+results = manager.search_drafts('budget approval', n_results=3)
+print(f'Search results: {len(results)}')
+for r in results:
+    print(f'  - ID: {r[\"id\"]}')
+    print(f'    Distance: {r[\"distance\"]:.4f}')
+    if r.get('metadata'):
+        print(f'    Draft ID: {r[\"metadata\"].get(\"draft_id\")}')
+        print(f'    Subject: {r[\"metadata\"].get(\"subject\", \"N/A\")}')
+"
+```
+
+**Check ChromaDB file structure:**
+```bash
+# List ChromaDB files
+ls -la data/chromadb/
+
+# Check file sizes
+du -sh data/chromadb/*
+
+# Check if collection database exists
+ls -la data/chromadb/chroma.sqlite3
+```
+
+#### Combined Verification
+
+**Verify draft exists in both databases:**
+```bash
+# Replace 1 with actual draft ID
+uv run python -c "
+from utils.artifacts_db import ArtifactsDB
+from utils.chromadb_manager import ChromaDBManager
+
+draft_id = 1
+
+# Check artifacts database
+db = ArtifactsDB()
+draft = db.get_draft(draft_id)
+if draft:
+    print(f'✓ Draft {draft_id} in artifacts DB: {draft[\"subject\"]}')
+else:
+    print(f'✗ Draft {draft_id} NOT in artifacts DB')
+
+# Check ChromaDB
+manager = ChromaDBManager()
+collection = manager.get_collection()
+if collection:
+    # Search for draft by metadata
+    results = collection.get(where={'draft_id': str(draft_id)}, limit=1)
+    if results['ids']:
+        print(f'✓ Draft {draft_id} indexed in ChromaDB: {results[\"ids\"][0]}')
+    else:
+        print(f'✗ Draft {draft_id} NOT indexed in ChromaDB')
+"
+```
 
 ---
 
@@ -680,13 +1191,36 @@ cat tools/__init__.py
 ```
 
 ### Issue: Search returns no results even after creating drafts
-**Cause:** Indexing failed silently
+**Cause:** Indexing failed silently or database issue
 **Solution:**
 ```bash
-# Check if drafts created
-ls -la inbox/drafts/
+# Check if drafts exist in artifacts database
+uv run python -c "
+from utils.artifacts_db import ArtifactsDB
+db = ArtifactsDB()
+drafts = db.get_drafts_by_thread('unknown')
+print(f'Drafts in artifacts DB: {len(drafts)}')
+for d in drafts:
+    print(f'  - ID {d[\"id\"]}: {d[\"subject\"]}')
+"
 
-# Check ChromaDB created
+# Check ChromaDB collection and document count
+uv run python -c "
+from utils.chromadb_manager import ChromaDBManager
+manager = ChromaDBManager()
+collection = manager.get_collection()
+if collection:
+    count = manager.get_draft_count()
+    print(f'Documents in ChromaDB: {count}')
+    if count > 0:
+        # Get sample to verify indexing
+        results = collection.get(limit=1)
+        print(f'Sample document ID: {results[\"ids\"][0]}')
+else:
+    print('ChromaDB collection not initialized')
+"
+
+# Check ChromaDB directory
 ls -la data/chromadb/
 
 # Check console logs for indexing errors
@@ -707,7 +1241,7 @@ uv run python -c "from agents.llm_triage_agent import AVAILABLE_TOOLS; print('se
 
 Phase 2 is considered **PASS** if:
 
-- [x] ✅ All 9 core tests pass
+- [x] ✅ All 10 core tests pass
 - [x] ✅ Semantic search finds relevant drafts
 - [x] ✅ Auto-indexing works without errors
 - [x] ✅ Data persists across sessions
@@ -750,11 +1284,12 @@ Phase 2 is considered **FAIL** if:
   - Search Tool: `tools/search_drafts_tool.py`
   - ChromaDB Manager: `utils/chromadb_manager.py`
   - Indexer: `tools/draft_indexer.py`
+  - Artifacts Database: `utils/artifacts_db.py`
   - Examples: `data/examples.yaml`
   - Loader: `utils/example_loader.py`
 
 ---
 
 **Last Updated:** 2025-12-16
-**Phase:** 2
+**Phase:** 2 (Updated for Artifacts Database Migration)
 **Status:** Ready for Testing
