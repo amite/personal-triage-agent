@@ -41,6 +41,78 @@
 
 ---
 
+# The three main nodes of the langraph architecture
+
+[crash course from gemini](https://gemini.google.com/app/e3d101faee6ca3d3)
+
+In `main.py`, the three nodes are:
+
+### 1. **Agent Node** (Triage Node)
+- **Location**: `main.py`, lines **59-94**
+- **Function**: `triage_node(state: AgentState)`
+- **Purpose**: Uses `LLMTriageAgent` to analyze the user request and populate the task queue
+- **Registered in graph**: Line 198 as `"triage"`
+
+### 2. **Tool Node** (Tool Execution Node)
+- **Location**: `main.py`, lines **96-138**
+- **Function**: `tool_execution_node(state: AgentState)`
+- **Purpose**: Executes tools from the task queue (reminder, drafting, search)
+- **Registered in graph**: Line 199 as `"tool_execution"`
+
+### 3. **Final Response Node** (Finish Node)
+- **Location**: `main.py`, lines **140-146**
+- **Function**: `finish_node(state: AgentState)`
+- **Purpose**: Final compilation and summary generation
+- **Registered in graph**: Line 200 as `"finish"`
+
+All three are defined in the **"GRAPH NODES"** section (lines 56-146) and registered in `build_graph()` (lines 192-231). The graph structure is:
+
+```
+START → triage → [conditional] → tool_execution → [conditional] → finish → END
+```
+
+The final summary display happens after the graph execution completes, in `run_task_manager()` at lines 422-425, where `display_execution_tree()` and `display_summary()` are called.
+
+
+---
+
+# Where the Thinking happens
+
+The "thinking" part is in the Triage Agent, where the LLM analyzes the request and generates reasoning.
+
+## Primary Thinking Location
+
+The thinking happens in `agents/llm_triage_agent.py`, specifically in the `parse_request_with_llm()` method:
+
+```66:118:agents/llm_triage_agent.py
+@lru_cache(maxsize=100)
+def parse_request_with_llm(self, request: str) -> ParseResult:
+    """Use LLM to parse request into discrete tasks and return tasks plus reasoning
+    ...
+    """
+    # ... prompt construction (lines 90-106) ...
+    
+    response = self.llm.generate(prompt, temperature=0.3)  # Line 110 - THE THINKING HAPPENS HERE
+    
+    # Parse response to extract reasoning
+    parsed = TaskResponse.model_validate_json(response)
+    tasks = [{"tool": task.tool, "content": task.content} for task in parsed.tasks]
+    return tasks, parsed.reasoning  # Returns the LLM's reasoning
+```
+
+The thinking process:
+1. Prompt construction (lines 90-106): Builds a prompt asking the LLM to analyze the request
+2. LLM call (line 110): `self.llm.generate(prompt, temperature=0.3)` — the LLM analyzes and reasons
+3. Reasoning extraction: The LLM response includes a `reasoning` field explaining why it identified certain tasks
+4. Storage: The reasoning is stored in `state["llm_reasoning"]` in the triage node (line 74 of `main.py`)
+5. Display: The reasoning is shown to the user in a panel (lines 78-82 of `main.py`)
+
+## Secondary Thinking
+
+The drafting agent also uses the LLM to generate email content (in `tools/drafting_tool.py`, line 31), but it doesn't return explicit reasoning—it generates the email body directly.
+
+The main "thinking" is the triage agent's reasoning step, which follows the ReAct pattern: the agent reasons about what tasks to perform before acting (executing tools).
+
 ## Architectural Layers
 
 The system is organized into 5 distinct layers:
