@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langchain_core.runnables.config import RunnableConfig
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -403,7 +404,7 @@ def run_task_manager(user_request: str, thread_id: Optional[str] = None) -> Agen
     graph = build_graph()
 
     # Configuration with thread ID for persistence
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     with Progress(
         SpinnerColumn(),
