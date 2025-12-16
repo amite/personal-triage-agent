@@ -3,5 +3,19 @@
   "python.analysis.extraPaths": [
     "${workspaceFolder}/.venv/lib/python3.12/site-packages"
   ],
-  "python.analysis.typeCheckingMode": "basic"
+  "python.analysis.typeCheckingMode": "basic",
+  "sqltools.connections": [
+    {
+      "previewLimit": 50,
+      "driver": "SQLite",
+      "name": "artifacts",
+      "database": "data/artifacts.db"
+    },
+    {
+      "previewLimit": 50,
+      "driver": "SQLite",
+      "database": "data/checkpoints.db",
+      "name": "checkpoints"
+    }
+  ]
 }
