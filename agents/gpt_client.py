@@ -1,11 +1,12 @@
 """
-GPT-4 Client - Handles communication with OpenAI GPT-4 API
+GPT Client - Handles communication with OpenAI API using official SDK
 """
 
 import os
-import requests
 import logging
 from typing import Optional
+from openai import OpenAI
+from openai import APIError, APIConnectionError, APITimeoutError
 from rich.console import Console
 from agents.llm_client_base import LLMClientBase
 
@@ -16,11 +17,10 @@ console = Console()
 
 # OpenAI configuration
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_GPT_MODEL = "gpt-5-nano"
 
 class GPTClient(LLMClientBase):
-    """Client for interacting with OpenAI GPT-5 API"""
+    """Client for interacting with OpenAI API using official SDK"""
     
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -32,14 +32,15 @@ class GPTClient(LLMClientBase):
         self.api_key = api_key or OPENAI_API_KEY
         if not self.api_key:
             raise ValueError("OpenAI API key not provided and OPENAI_API_KEY environment variable not set")
+        self.client = OpenAI(api_key=self.api_key)
     
     def generate(self, prompt: str, model: Optional[str] = None, temperature: float = 0.3) -> str:
         """
-        Generate text using GPT-4 API
+        Generate text using OpenAI Responses API
         
         Args:
             prompt: The input prompt for text generation
-            model: Optional model identifier (defaults to gpt-4-0)
+            model: Optional model identifier (defaults to gpt-5-nano)
             temperature: Temperature for generation (0.0-1.0)
             
         Returns:
@@ -51,88 +52,40 @@ class GPTClient(LLMClientBase):
         model = model or DEFAULT_GPT_MODEL
         
         try:
-            # Use Responses API for GPT-5 models, Chat Completions for older models
-            if model.startswith("gpt-5"):
-                # GPT-5 models use Responses API
-                response = requests.post(
-                    f"{OPENAI_BASE_URL}/responses",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "input": prompt,
-                        "max_output_tokens": 2000
-                    },
-                    timeout=60
-                )
-            else:
-                # Older models use Chat Completions API
-                response = requests.post(
-                    f"{OPENAI_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "user", "content": prompt}
-                        ],
-                        "max_completion_tokens": 1000
-                    },
-                    timeout=60
-                )
-            response.raise_for_status()
+            # Use Responses API for all models (simplified, single codepath)
+            # Note: GPT-5 models don't support temperature parameter in Responses API
+            create_params = {
+                "model": model,
+                "input": prompt,
+                "max_output_tokens": 2000,
+                "timeout": 60.0
+            }
             
-            # Extract the generated content based on API used
-            response_data = response.json()
+            # Only include temperature for models that support it (non-GPT-5 models)
+            if not model.startswith("gpt-5"):
+                create_params["temperature"] = temperature
             
-            if model.startswith("gpt-5"):
-                # Responses API format - try multiple possible response structures
-                output_items = response_data.get("output", [])
+            response = self.client.responses.create(**create_params)
+            
+            # SDK provides direct access to output text - no manual JSON parsing needed
+            return response.output_text.strip()
                 
-                # Try to extract text from various possible structures
-                for item in output_items:
-                    # Structure 1: item.type == "message", content[].type == "text" or "output_text"
-                    if item.get("type") == "message":
-                        content_items = item.get("content", [])
-                        for content in content_items:
-                            if content.get("type") in ["text", "output_text"]:
-                                text = content.get("text", "")
-                                if text:
-                                    return text.strip()
-                    
-                    # Structure 2: item has direct "text" field
-                    if "text" in item:
-                        text = item.get("text", "")
-                        if text:
-                            return text.strip()
-                    
-                    # Structure 3: item.content is a string
-                    if "content" in item and isinstance(item.get("content"), str):
-                        return item.get("content").strip()
-                
-                # If we get here, log the actual structure for debugging
-                error_msg = f"No text found in Responses API response. Response structure: {response_data}"
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-            else:
-                # Chat Completions API format
-                choices = response_data.get("choices", [])
-                if choices and len(choices) > 0:
-                    return choices[0]["message"]["content"].strip()
-                else:
-                    raise ValueError("No choices returned from Chat Completions API")
-                
-        except requests.exceptions.ConnectionError:
-            console.print("[bold red]Error: Cannot connect to OpenAI API. Check your internet connection.[/bold red]")
-            raise
-        except requests.exceptions.HTTPError as e:
-            error_msg = f"OpenAI API error: {e.response.status_code} - {e.response.text}"
+        except APIConnectionError as e:
+            error_msg = "Cannot connect to OpenAI API. Check your internet connection."
+            console.print(f"[bold red]Error: {error_msg}[/bold red]")
+            logger.error(f"Connection error: {e}")
+            raise Exception(error_msg) from e
+        except APITimeoutError as e:
+            error_msg = "OpenAI API request timed out."
+            console.print(f"[bold red]Error: {error_msg}[/bold red]")
+            logger.error(f"Timeout error: {e}")
+            raise Exception(error_msg) from e
+        except APIError as e:
+            error_msg = f"OpenAI API error: {e.status_code if hasattr(e, 'status_code') else 'unknown'} - {e.message if hasattr(e, 'message') else str(e)}"
             console.print(f"[bold red]{error_msg}[/bold red]")
-            raise Exception(error_msg)
+            logger.error(f"API error: {e}")
+            raise Exception(error_msg) from e
         except Exception as e:
             console.print(f"[bold red]Error generating response: {e}[/bold red]")
+            logger.error(f"Unexpected error: {e}", exc_info=True)
             raise
