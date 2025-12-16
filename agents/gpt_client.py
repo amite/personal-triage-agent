@@ -4,9 +4,12 @@ GPT-4 Client - Handles communication with OpenAI GPT-4 API
 
 import os
 import requests
+import logging
 from typing import Optional
 from rich.console import Console
 from agents.llm_client_base import LLMClientBase
+
+logger = logging.getLogger(__name__)
 
 # Initialize Rich console
 console = Console()
@@ -87,15 +90,34 @@ class GPTClient(LLMClientBase):
             response_data = response.json()
             
             if model.startswith("gpt-5"):
-                # Responses API format
+                # Responses API format - try multiple possible response structures
                 output_items = response_data.get("output", [])
+                
+                # Try to extract text from various possible structures
                 for item in output_items:
+                    # Structure 1: item.type == "message", content[].type == "text" or "output_text"
                     if item.get("type") == "message":
                         content_items = item.get("content", [])
                         for content in content_items:
-                            if content.get("type") == "output_text":
-                                return content.get("text", "").strip()
-                raise ValueError("No output_text found in Responses API response")
+                            if content.get("type") in ["text", "output_text"]:
+                                text = content.get("text", "")
+                                if text:
+                                    return text.strip()
+                    
+                    # Structure 2: item has direct "text" field
+                    if "text" in item:
+                        text = item.get("text", "")
+                        if text:
+                            return text.strip()
+                    
+                    # Structure 3: item.content is a string
+                    if "content" in item and isinstance(item.get("content"), str):
+                        return item.get("content").strip()
+                
+                # If we get here, log the actual structure for debugging
+                error_msg = f"No text found in Responses API response. Response structure: {response_data}"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
             else:
                 # Chat Completions API format
                 choices = response_data.get("choices", [])
