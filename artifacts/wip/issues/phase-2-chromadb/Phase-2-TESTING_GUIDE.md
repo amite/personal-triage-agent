@@ -172,31 +172,6 @@ Verify that drafting_tool execution automatically triggers DraftIndexer.
    - [ ] Draft ID is valid (can be queried from database)
    - [ ] Thread ID is linked to the draft
    
-   **Query Commands:**
-   ```bash
-   # Get draft by ID (replace 1 with actual draft ID from output)
-   uv run python -c "
-   from utils.artifacts_db import ArtifactsDB
-   db = ArtifactsDB()
-   draft = db.get_draft(1)
-   if draft:
-       print(f'✓ Draft ID 1 found: {draft[\"subject\"]}')
-       print(f'  Thread ID: {draft[\"thread_id\"]}')
-       print(f'  Created: {draft[\"created_at\"]}')
-   else:
-       print('✗ Draft ID 1 not found')
-   "
-   
-   # List all drafts
-   uv run python -c "
-   from utils.artifacts_db import ArtifactsDB
-   db = ArtifactsDB()
-   drafts = db.get_drafts_by_thread('unknown')
-   print(f'✓ Found {len(drafts)} draft(s)')
-   for d in drafts:
-       print(f'  - ID {d[\"id\"]}: {d[\"subject\"]} (thread: {d[\"thread_id\"]})')
-   "
-   ```
 
 5. **Verify Indexing Happened**
    - [ ] No errors in console about indexing
@@ -204,19 +179,7 @@ Verify that drafting_tool execution automatically triggers DraftIndexer.
    - [ ] ChromaDB collection should be created
    
    **Query Commands:**
-   ```bash
-   # Check ChromaDB collection exists and has documents
-   uv run python -c "
-   from utils.chromadb_manager import ChromaDBManager
-   manager = ChromaDBManager()
-   collection = manager.get_collection()
-   if collection:
-       count = manager.get_draft_count()
-       print(f'✓ ChromaDB collection exists: email_drafts')
-       print(f'  Documents indexed: {count}')
-   else:
-       print('✗ ChromaDB collection not found')
-   "
+
    
    # Check ChromaDB directory exists
    ls -la data/chromadb/
