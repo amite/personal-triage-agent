@@ -1,0 +1,365 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      SESSION REFINER SKILL - COMPLETE                      ║
+║                   Automatic Token Usage Optimization                        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+SKILL CREATED: session-refiner/
+STATUS: Ready to use ✓
+
+────────────────────────────────────────────────────────────────────────────
+PROBLEM IT SOLVES
+────────────────────────────────────────────────────────────────────────────
+
+Long coding sessions consume massive context tokens:
+  - Session 1 uses 100,000+ tokens over hours of debugging
+  - Session 2 inherits all 100k+ tokens in history
+  - This wastes money and leaves only 100k tokens for new work
+
+Solution: Session Refiner bridges sessions with only essential info
+  - Extract key decisions, bugs, tasks, code snippets
+  - Generate compact 2,000-5,000 token markdown summary
+  - Start fresh session with summary (instead of full history)
+  - Result: 96,500+ token savings per session transition
+
+
+────────────────────────────────────────────────────────────────────────────
+QUICK START
+────────────────────────────────────────────────────────────────────────────
+
+In ANY Claude Code session, just ask:
+
+  "Use Session Refiner to create a summary"
+
+Claude will:
+  1. Scan your current conversation
+  2. Extract key information
+  3. Generate a markdown summary
+  4. You download it
+
+Then:
+  1. Start a new chat session
+  2. Paste the summary at the top
+  3. Say: "Here's my session summary. Let's continue..."
+  4. Resume work with fresh context window
+
+
+────────────────────────────────────────────────────────────────────────────
+FILE STRUCTURE
+────────────────────────────────────────────────────────────────────────────
+
+session-refiner/
+├── SKILL.md
+│   └─ Main skill definition with usage instructions
+│
+├── scripts/
+│   └─ extract_session_summary.py
+│      └─ Python script for local extraction (no Claude needed)
+│
+├── references/
+│   └─ workflow.md
+│      └─ Detailed step-by-step usage guide
+│
+└── assets/
+    └─ example-summary.md
+       └─ Real-world example showing expected output
+
+
+────────────────────────────────────────────────────────────────────────────
+TWO METHODS TO USE
+────────────────────────────────────────────────────────────────────────────
+
+METHOD 1: Ask Claude (Easiest, Recommended)
+─────────────────────────────────────────
+In your chat: "Use Session Refiner to create a summary"
+  ✓ Claude does all the work
+  ✓ No manual setup
+  ✓ Takes 1-2 minutes
+  ✓ Generates markdown file
+
+METHOD 2: Run Script Locally (Most Control)
+─────────────────────────────────────────
+# Export conversation to text file, then:
+python .claude/skills/session-refiner/scripts/extract_session_summary.py \
+  conversation.txt \
+  --output summary.md \
+  --max-tokens 5000
+
+  ✓ Full programmatic control
+  ✓ Can integrate with automation
+  ✓ Works offline
+  ✓ Same output as Method 1
+
+
+────────────────────────────────────────────────────────────────────────────
+WHAT GETS EXTRACTED
+────────────────────────────────────────────────────────────────────────────
+
+Active Tasks
+  Source: TODO, FIXME, [ ] checkboxes
+  Purpose: Resume work where you left off
+  
+  Examples:
+    - TODO: Fix auth middleware
+    - FIXME: Error handling in API
+    - [ ] Add integration tests
+
+Key Technical Decisions
+  Source: "Decided to...", "Using...", "Chose..."
+  Purpose: Remember why choices were made
+  
+  Examples:
+    - JWT tokens with 15-min expiry (not sessions)
+    - PostgreSQL (for transactions, not MongoDB)
+    - Redis for rate limiting
+
+Resolved Issues
+  Source: "Fixed:", "Resolved:", debugging discussions
+  Purpose: Avoid re-solving same bugs
+  
+  Examples:
+    - Fixed CORS errors (credentials flag)
+    - Resolved password regex (Unicode support)
+
+Code References
+  Source: Code blocks (```language blocks)
+  Purpose: Keep recent patterns and configs
+  
+  Examples:
+    - Authentication middleware
+    - Database schema
+    - Environment variables
+
+Key Findings
+  Source: "Important:", "Key finding:", "Note:"
+  Purpose: Capture non-obvious insights
+  
+  Examples:
+    - Session tokens need 15-min expiry (security)
+    - Redis pooling critical for performance
+
+
+────────────────────────────────────────────────────────────────────────────
+HOW TO STRUCTURE YOUR CONVERSATION FOR BETTER EXTRACTION
+────────────────────────────────────────────────────────────────────────────
+
+Use these patterns in your chat for clearer extraction:
+
+Tasks:
+  ✓ "TODO: Add input validation"
+  ✓ "- [ ] Write unit tests"
+  ✓ "FIXME: Handle edge case in parsing"
+
+Decisions:
+  ✓ "Decided to use JWT for auth"
+  ✓ "We chose PostgreSQL for ACID transactions"
+  ✓ "Using Redis for rate limiting"
+
+Bug Fixes:
+  ✓ "Fixed the CORS preflight error"
+  ✓ "Resolved the race condition in cache"
+
+Findings:
+  ✓ "Key finding: Indexes critical for performance"
+  ✓ "Important: This endpoint needs rate limiting"
+  ✓ "Note: Update the migration script"
+
+Code:
+  ```javascript
+  const example = () => { ... }
+  ```
+
+
+────────────────────────────────────────────────────────────────────────────
+REAL-WORLD TOKEN SAVINGS
+────────────────────────────────────────────────────────────────────────────
+
+WITHOUT Session Refiner:
+  Session 1: Start with 200k tokens
+  - Debug auth system: 50k tokens used
+  - Implement features: 40k tokens used
+  - Resolve bugs: 30k tokens used
+  = 120k tokens consumed, 80k remaining
+
+  Session 2: Start fresh... but with Session 1's full history!
+  - Session 1 history: 120k tokens loaded
+  - New work budget: 80k tokens
+  - WASTED: 120k token budget could be reused
+
+
+WITH Session Refiner:
+  Session 1: (same as above)
+  - Tokens used: 120k
+  
+  Session Refiner Summary:
+  - Extract key info: 3,500 tokens
+  
+  Session 2: Start fresh with ONLY summary
+  - Summary history: 3,500 tokens
+  - New work budget: 196,500 tokens
+  - SAVED: 116,500 tokens!
+
+
+────────────────────────────────────────────────────────────────────────────
+WHEN TO USE SESSION REFINER
+────────────────────────────────────────────────────────────────────────────
+
+✓ After completing a major feature
+✓ After resolving a complex bug (especially multi-round debugging)
+✓ When switching between different codebases/projects
+✓ When Claude warns "conversation is getting long"
+✓ At the end of your work day before logging off
+✓ When conversation history exceeds 50,000 tokens
+✓ Before starting unrelated work on same project
+
+
+────────────────────────────────────────────────────────────────────────────
+BEST PRACTICES
+────────────────────────────────────────────────────────────────────────────
+
+1. USE CLEAR MARKERS
+   Write in patterns that extraction can find:
+   - "TODO:" for tasks
+   - "Fixed:" for bug resolutions
+   - "Decided to..." for decisions
+   - "Note:" for important findings
+
+2. EXTRACT AT GOOD MOMENTS
+   - After finishing a module
+   - After debugging session completes
+   - NOT mid-task (you'll lose context of current work)
+
+3. REVIEW THE SUMMARY
+   Before pasting in new session:
+   - Skim for accuracy
+   - Add clarifying notes if something seems vague
+   - Delete irrelevant items
+   - Verify file paths are correct
+
+4. SAVE ORIGINALS
+   Keep full conversations elsewhere:
+   - In case you need to reference detailed discussion later
+   - For learning/improvement of extraction patterns
+
+5. BE EXPLICIT ABOUT RESUMPTION
+   In the new session, lead with:
+   "Here's my session summary. I want to continue with..."
+   Then describe what you want to do next.
+
+
+────────────────────────────────────────────────────────────────────────────
+EXAMPLE WORKFLOW
+────────────────────────────────────────────────────────────────────────────
+
+Time: 3pm - Start debugging auth issues
+
+Session 1 (3pm - 5pm): 2 hours of auth debugging
+  - Identified JWT approach
+  - Fixed CORS errors
+  - Resolved token expiry calculation
+  - Implemented refresh token rotation
+  - Tokens used: 85,000+
+
+5:00pm - Ask: "Use Session Refiner to create a summary"
+  - Claude generates summary: 3,500 tokens
+  - Download: auth-session-summary.md
+
+5:05pm - Start fresh chat
+  - Paste auth summary
+  - Ask: "Here's my summary. Now I want to implement password reset"
+
+Session 2 (5:05pm - 6pm): 55 minutes of password reset
+  - Fresh context! 196,500 tokens available
+  - Implement password reset flow
+  - Add email validation
+  - Write tests
+  - Tokens used: 40,000
+
+Total savings: 85,000 - 3,500 = 81,500 tokens freed up!
+
+
+────────────────────────────────────────────────────────────────────────────
+SCRIPT PARAMETERS
+────────────────────────────────────────────────────────────────────────────
+
+When running the extraction script locally:
+
+python extract_session_summary.py <input_file> [options]
+
+Required:
+  <input_file>           Path to conversation text file
+
+Optional:
+  --output, -o FILE      Output markdown file (default: session-summary.md)
+  --max-tokens, -m NUM   Maximum tokens for summary (default: 5000)
+  --help, -h             Show help message
+
+Examples:
+  # Basic usage
+  python extract_session_summary.py chat.txt
+  
+  # Custom output file
+  python extract_session_summary.py chat.txt -o auth-summary.md
+  
+  # Limit to 3000 tokens
+  python extract_session_summary.py chat.txt -m 3000
+
+
+────────────────────────────────────────────────────────────────────────────
+TROUBLESHOOTING
+────────────────────────────────────────────────────────────────────────────
+
+Q: "The summary is missing important decisions"
+A: Use clearer patterns in conversation:
+   - Instead of "I think we should use JWT"
+   - Write: "Decided to use JWT tokens with 15-min expiry"
+
+Q: "Code snippets are incomplete in the summary"
+A: The summary keeps only the most important snippets to save tokens.
+   Keep full code in reference files or version control.
+
+Q: "I want more/fewer tasks in the summary"
+A: Manually edit the markdown before pasting into new session.
+   Remove items you don't need, add context if missing.
+
+Q: "The summary doesn't capture complex discussions"
+A: That's by design! Session Refiner focuses on essentials.
+   For detailed context, reference the original conversation.
+
+Q: "Can I edit the generated summary?"
+A: Absolutely! That's why you review it before pasting.
+   Edit for clarity, add notes, remove noise.
+
+
+────────────────────────────────────────────────────────────────────────────
+COMPATIBILITY
+────────────────────────────────────────────────────────────────────────────
+
+Works with:
+  ✓ Claude Code (all versions)
+  ✓ Any Claude model (Opus, Sonnet, Haiku)
+  ✓ Any programming language
+  ✓ Any type of technical work
+
+Requirements:
+  - Python 3.6+ (for local script usage)
+  - Text file export from chat (for Method 2)
+  - Standard markdown viewer (to read summary)
+
+
+────────────────────────────────────────────────────────────────────────────
+SUMMARY
+────────────────────────────────────────────────────────────────────────────
+
+Session Refiner is your context window manager:
+  ✓ Saves 80,000+ tokens per session transition
+  ✓ Preserves essential continuity
+  ✓ Takes 1-2 minutes to use
+  ✓ Two methods: Ask Claude (easy) or run script locally (control)
+
+Ready to use NOW:
+  In your next long session, just ask:
+  "Use Session Refiner to create a summary"
+
+The skill will guide you through the rest!
+
+────────────────────────────────────────────────────────────────────────────

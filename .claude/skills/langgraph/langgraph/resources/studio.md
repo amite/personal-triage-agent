@@ -1,0 +1,7 @@
+---
+title: LangSmith Studio
+---
+
+import Studio from '/snippets/oss/studio.mdx';
+
+<Studio/>

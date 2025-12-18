@@ -1,0 +1,8 @@
+{
+  "name": "langgraph-skill",
+  "version": "1.0.0",
+  "scripts": {
+    "sync": "bun run scripts/sync-docs.ts",
+    "sync:dry": "bun run scripts/sync-docs.ts --dry-run"
+  }
+}
